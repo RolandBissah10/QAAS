@@ -40,7 +40,8 @@ jobs:
       - name: Push Docker image
         if: github.event_name == 'push'
         run: |
-          IMAGE=ghcr.io/${{ github.repository }}/qaas-api:${{ github.sha }}
+          REPOSITORY=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=ghcr.io/$REPOSITORY/qaas-api:${{ github.sha }}
           docker tag qaas-api:${{ github.sha }} "$IMAGE"
           docker push "$IMAGE"
 
