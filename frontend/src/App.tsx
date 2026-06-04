@@ -17,6 +17,7 @@ function ProtectedRoute() {
   return accessToken ? <AppLayout /> : <Navigate to="/login" replace />;
 }
 
+
 function RoleRoute({ allowedRoles, element }: { allowedRoles: Role[]; element: JSX.Element }) {
   const { accessToken, user } = useAuth();
   if (!accessToken) {
