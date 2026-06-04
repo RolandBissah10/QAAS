@@ -8,6 +8,7 @@ import com.qaas.config.AppProperties;
 import com.qaas.exception.BadRequestException;
 import com.qaas.security.JwtService;
 import com.qaas.user.User;
+import com.qaas.user.Role;
 import com.qaas.user.UserDto;
 import com.qaas.user.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,7 +42,7 @@ public class AuthService {
         if (users.existsByEmail(request.email())) {
             throw new BadRequestException("Email is already registered");
         }
-        User user = users.save(new User(request.email(), passwordEncoder.encode(request.password()), request.role()));
+        User user = users.save(new User(request.email(), passwordEncoder.encode(request.password()), Role.VIEWER));
         return issueTokens(user);
     }
 

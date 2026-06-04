@@ -26,6 +26,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/api/users/me").authenticated()
+                        .requestMatchers("/api/users/**").hasRole("OWNER")
                         .requestMatchers(HttpMethod.GET, "/api/results/**", "/api/dashboard/**").hasAnyRole("OWNER", "TESTER", "VIEWER")
                         .requestMatchers("/api/projects/**", "/api/environments/**").hasRole("OWNER")
                         .requestMatchers("/api/tests/**", "/api/collections/**", "/api/executions/**").hasAnyRole("OWNER", "TESTER")
