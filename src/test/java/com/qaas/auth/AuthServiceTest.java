@@ -49,7 +49,7 @@ class AuthServiceTest {
     void registerRejectsDuplicateEmail() {
         when(users.existsByEmail("owner@qaas.dev")).thenReturn(true);
 
-        RegisterRequest request = new RegisterRequest("owner@qaas.dev", "password123", Role.OWNER);
+        RegisterRequest request = new RegisterRequest("owner@qaas.dev", "password123");
 
         assertThatThrownBy(() -> service.register(request))
                 .isInstanceOf(BadRequestException.class)

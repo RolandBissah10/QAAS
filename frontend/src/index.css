@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #18212f;
+  background: #eef2f6;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dark {
+  color: #e5edf7;
+  background: #0b1120;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+@layer base {
+  body {
+    background-color: #f6f8fb;
+    color: #18212f;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
+  }
+
+  .dark body {
+    background-color: #020617;
+    color: #f8fafc;
+  }
+}
+
+@layer utilities {
+  .dark .bg-white {
+    background-color: #111827;
+  }
+
+  .dark .bg-panel {
+    background-color: #0b1120;
+  }
+
+  .dark .bg-slate-100 {
+    background-color: #1f2937;
+  }
+
+  .dark .bg-slate-950 {
+    background-color: #020617;
+  }
+
+  .dark .bg-teal-50 {
+    background-color: rgba(20, 184, 166, 0.14);
+  }
+
+  .dark .bg-red-50 {
+    background-color: rgba(127, 29, 29, 0.24);
+  }
+
+  .dark .bg-amber-50 {
+    background-color: rgba(120, 53, 15, 0.24);
+  }
+
+  .dark .bg-emerald-50 {
+    background-color: rgba(6, 78, 59, 0.28);
+  }
+
+  .dark .hover\:bg-panel:hover {
+    background-color: #0b1120;
+  }
+
+  .dark .hover\:bg-slate-100:hover {
+    background-color: #1f2937;
+  }
+
+  .dark .hover\:text-ink:hover {
+    color: #e5edf7;
+  }
+
+  .dark .border-line {
+    border-color: #263244;
+  }
+
+  .dark .border-red-200 {
+    border-color: #7f1d1d;
+  }
+
+  .dark .text-ink {
+    color: #e5edf7;
+  }
+
+  .dark .text-slate-500 {
+    color: #94a3b8;
+  }
+
+  .dark .text-slate-600,
+  .dark .text-slate-700 {
+    color: #cbd5e1;
+  }
+
+  .dark .text-slate-100 {
+    color: #f8fafc;
+  }
+
+  .dark .text-brand {
+    color: #2dd4bf;
+  }
+
+  .dark .text-red-700 {
+    color: #fca5a5;
+  }
+
+  .dark .text-amber-700 {
+    color: #fcd34d;
+  }
+
+  .dark .text-emerald-700 {
+    color: #86efac;
+  }
+
+  .dark .ring-teal-100 {
+    --tw-ring-color: rgba(45, 212, 191, 0.24);
+  }
+
+  .dark .ring-red-200 {
+    --tw-ring-color: rgba(248, 113, 113, 0.34);
+  }
+
+  .dark .ring-amber-200 {
+    --tw-ring-color: rgba(251, 191, 36, 0.34);
+  }
+
+  .dark .ring-emerald-200 {
+    --tw-ring-color: rgba(52, 211, 153, 0.34);
+  }
+
+  .dark .shadow-soft {
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.34);
+  }
+}

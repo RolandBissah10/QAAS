@@ -13,4 +13,8 @@ public interface TestResultRepository extends JpaRepository<TestResult, UUID> {
 
     @Query("select coalesce(avg(r.responseTime), 0) from TestResult r")
     double averageResponseTime();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("delete from TestResult r where r.execution.id in (select e.id from TestExecution e join e.test t where t.project.id = :projectId)")
+    void deleteByProjectId(java.util.UUID projectId);
 }

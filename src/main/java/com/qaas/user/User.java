@@ -54,4 +54,8 @@ public class User extends BaseEntity {
     public void updateProfile(String displayName) {
         this.displayName = displayName;
     }
+
+    public void updateRole(Role role) {
+        this.role = role;
+    }
 }
