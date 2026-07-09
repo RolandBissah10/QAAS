@@ -12,18 +12,30 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class CrawlerServiceImpl implements CrawlerService {
 
     private static final Logger log = LoggerFactory.getLogger(CrawlerServiceImpl.class);
 
-    // JS that collects every navigable href on the page, including hash-fragment SPA routes
     private static final String EXTRACT_LINKS_JS = """
         Array.from(document.querySelectorAll('a[href]'))
              .map(a => a.href)
              .filter(h => h && h.length > 0)
         """;
+
+    /** Common application routes to probe when link-following doesn't find them. */
+    private static final List<String> COMMON_PATHS = List.of(
+        "/dashboard", "/home", "/profile", "/settings", "/account",
+        "/admin", "/analytics", "/reports", "/users", "/products",
+        "/orders", "/notifications", "/messages", "/search",
+        "/help", "/about", "/contact", "/projects", "/teams",
+        "/invoices", "/billing", "/integrations", "/api-keys"
+    );
+
+    private static final Pattern SITEMAP_LOC = Pattern.compile("<loc>([^<]+)</loc>", Pattern.CASE_INSENSITIVE);
 
     @Override
     public CrawlResult crawl(String baseUrl, CrawlOptions options) {
@@ -49,9 +61,9 @@ public class CrawlerServiceImpl implements CrawlerService {
                     .setArgs(List.of("--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"));
             Browser browser = pw.chromium().launch(opts);
             com.microsoft.playwright.Page page = browser.newPage();
-            // Longer timeout: SPAs may need time for JS bundles to execute
             page.setDefaultNavigationTimeout(20000);
 
+            // Step 1: Authenticate if credentials are configured
             if (options.hasAuth()) {
                 doLogin(page, options);
                 try {
@@ -61,6 +73,21 @@ public class CrawlerServiceImpl implements CrawlerService {
                 }
             }
 
+            // Step 2: Seed the queue from sitemap.xml — covers routes not linked from any page
+            List<String> sitemapUrls = extractFromSitemap(page, baseUri);
+            sitemapUrls.stream()
+                    .filter(u -> !visited.contains(u) && !isExcluded(u, options.excludedPatterns()))
+                    .forEach(queue::add);
+            if (!sitemapUrls.isEmpty()) {
+                log.info("Seeded {} URLs from sitemap.xml", sitemapUrls.size());
+                // Navigate back so the BFS loop starts from a clean state
+                try {
+                    page.navigate(baseUrl, new com.microsoft.playwright.Page.NavigateOptions()
+                            .setWaitUntil(WaitUntilState.LOAD).setTimeout(15000));
+                } catch (Exception ignored) {}
+            }
+
+            // Step 3: BFS link-following crawl
             while (!queue.isEmpty() && results.size() < options.maxPages()) {
                 String url = queue.poll();
                 if (visited.contains(url)) continue;
@@ -68,15 +95,22 @@ public class CrawlerServiceImpl implements CrawlerService {
                 visited.add(url);
 
                 try {
-                    // Wait for the full load event (not just HTML parse) so that
-                    // client-side frameworks (React, Vue, Angular) have time to mount
-                    // and render navigation links into the DOM.
                     Response response = page.navigate(url,
                             new com.microsoft.playwright.Page.NavigateOptions()
                                     .setWaitUntil(WaitUntilState.LOAD));
                     if (response == null || response.status() >= 400) continue;
 
-                    // Extra settling time for SPAs that render asynchronously after load
+                    // If the app redirected us to a login page, this route is auth-protected
+                    // and we have no session — skip it rather than recording the login page.
+                    String finalUrl = page.url();
+                    if (isAuthRedirect(url, finalUrl)) {
+                        log.debug("Skipping {} — redirected to auth page ({})", url, finalUrl);
+                        visited.add(finalUrl);
+                        continue;
+                    }
+                    visited.add(finalUrl);
+
+                    // Extra settling time for SPAs that hydrate asynchronously after load
                     try { page.waitForTimeout(1500); } catch (Exception ignored) {}
 
                     String title = page.title();
@@ -92,8 +126,7 @@ public class CrawlerServiceImpl implements CrawlerService {
                             URI u = URI.create(href);
                             if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) continue;
 
-                            // Preserve hash fragments for hash-based SPA routing (e.g. /#/dashboard).
-                            // Without this, every hash route normalises to "/" and gets skipped.
+                            // Preserve hash fragments for hash-based SPA routing (e.g. /#/dashboard)
                             String fragment = (u.getFragment() != null && !u.getFragment().isBlank())
                                     ? "#" + u.getFragment() : "";
                             String path = (u.getPath() == null || u.getPath().isBlank()) ? "/" : u.getPath();
@@ -110,6 +143,12 @@ public class CrawlerServiceImpl implements CrawlerService {
                     log.debug("Skipping {} — {}", url, e.getMessage());
                 }
             }
+
+            // Step 4: Probe common paths not yet discovered via link-following or sitemap.
+            // This catches routes that are only reachable by direct navigation (dashboards,
+            // settings pages, admin panels) and not linked from any crawled page.
+            probeCommonPaths(page, baseUri, visited, results, options);
+
             browser.close();
         } catch (Exception e) {
             log.error("Crawler failed for {}: {}", baseUrl, e.getMessage());
@@ -118,6 +157,73 @@ public class CrawlerServiceImpl implements CrawlerService {
         log.info("Crawled {} pages from {}", results.size(), baseUrl);
         return new CrawlResult(results, storageStateJson);
     }
+
+    // ── Sitemap extraction ────────────────────────────────────────────────────
+
+    private List<String> extractFromSitemap(com.microsoft.playwright.Page page, URI baseUri) {
+        List<String> urls = new ArrayList<>();
+        String sitemapUrl = baseUri.getScheme() + "://" + baseUri.getHost()
+                + (baseUri.getPort() > 0 ? ":" + baseUri.getPort() : "") + "/sitemap.xml";
+        try {
+            Response resp = page.navigate(sitemapUrl, new com.microsoft.playwright.Page.NavigateOptions()
+                    .setWaitUntil(WaitUntilState.LOAD).setTimeout(8000));
+            if (resp != null && resp.ok()) {
+                String content = page.content();
+                Matcher m = SITEMAP_LOC.matcher(content);
+                while (m.find()) {
+                    String loc = m.group(1).trim();
+                    try {
+                        URI u = URI.create(loc);
+                        if (baseUri.getHost().equalsIgnoreCase(u.getHost())) {
+                            urls.add(loc);
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception e) {
+            log.debug("No sitemap.xml at {}: {}", sitemapUrl, e.getMessage());
+        }
+        return urls;
+    }
+
+    // ── Common path probing ───────────────────────────────────────────────────
+
+    private void probeCommonPaths(com.microsoft.playwright.Page page, URI baseUri,
+                                   Set<String> visited, List<PageInfo> results, CrawlOptions options) {
+        String base = baseUri.getScheme() + "://" + baseUri.getHost()
+                + (baseUri.getPort() > 0 ? ":" + baseUri.getPort() : "");
+
+        for (String path : COMMON_PATHS) {
+            if (results.size() >= options.maxPages()) break;
+            String url = base + path;
+            if (visited.contains(url) || isExcluded(url, options.excludedPatterns())) continue;
+            visited.add(url);
+
+            try {
+                Response response = page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
+                        .setWaitUntil(WaitUntilState.LOAD).setTimeout(10000));
+                if (response == null || response.status() >= 400) continue;
+
+                String finalUrl = page.url();
+                if (isAuthRedirect(url, finalUrl)) {
+                    visited.add(finalUrl);
+                    continue;
+                }
+                visited.add(finalUrl);
+
+                try { page.waitForTimeout(1000); } catch (Exception ignored) {}
+
+                String title = page.title();
+                String html = page.content();
+                results.add(new PageInfo(url, title, html));
+                log.debug("Common path discovered: {}", url);
+            } catch (Exception e) {
+                log.debug("Common path probe failed for {}: {}", url, e.getMessage());
+            }
+        }
+    }
+
+    // ── Login ─────────────────────────────────────────────────────────────────
 
     private void doLogin(com.microsoft.playwright.Page page, CrawlOptions opts) {
         try {
@@ -142,6 +248,16 @@ public class CrawlerServiceImpl implements CrawlerService {
         } catch (Exception e) {
             log.warn("Login failed at {}: {}", opts.authUrl(), e.getMessage());
         }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Returns true when a navigation redirected away from the requested URL to an auth page. */
+    private boolean isAuthRedirect(String requestedUrl, String finalUrl) {
+        if (finalUrl == null || finalUrl.equals(requestedUrl)) return false;
+        String lower = finalUrl.toLowerCase();
+        return lower.contains("login") || lower.contains("signin")
+                || lower.contains("/auth") || lower.contains("unauthorized");
     }
 
     private boolean isExcluded(String url, List<String> patterns) {
