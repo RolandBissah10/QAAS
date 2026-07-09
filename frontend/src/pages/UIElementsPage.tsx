@@ -12,13 +12,13 @@ export function UIElementsPage() {
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const analyses = useQuery({
-    queryKey: ["analyses", selectedProject],
-    queryFn: () => analysisApi.byProject(selectedProject),
+    queryKey: ["analyses-dropdown", selectedProject],
+    queryFn: () => analysisApi.byProject(selectedProject, 0, 100),
     enabled: !!selectedProject,
   });
   const pages = useQuery({
-    queryKey: ["pages", selectedAnalysis],
-    queryFn: () => pageApi.byAnalysis(selectedAnalysis),
+    queryKey: ["pages-dropdown", selectedAnalysis],
+    queryFn: () => pageApi.byAnalysis(selectedAnalysis, 0, 100),
     enabled: !!selectedAnalysis,
   });
   const elements = useQuery({
@@ -61,7 +61,7 @@ export function UIElementsPage() {
             disabled={!selectedProject}
           >
             <option value="">Select analysis…</option>
-            {analyses.data?.map((a) => (
+            {analyses.data?.content.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.url}
               </option>
@@ -74,7 +74,7 @@ export function UIElementsPage() {
             disabled={!selectedAnalysis}
           >
             <option value="">Select page…</option>
-            {pages.data?.map((p) => (
+            {pages.data?.content.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.url}
               </option>

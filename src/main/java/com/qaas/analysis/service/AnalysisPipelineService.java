@@ -1,6 +1,7 @@
 package com.qaas.analysis.service;
 
 import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
 import com.qaas.analysis.ProgressEmitterRegistry;
@@ -9,6 +10,7 @@ import com.qaas.analysis.entity.Analysis;
 import com.qaas.analysis.repository.AnalysisRepository;
 import com.qaas.bug.BugDetectionService;
 import com.qaas.crawler.dto.CrawlOptions;
+import com.qaas.crawler.dto.CrawlResult;
 import com.qaas.crawler.dto.PageInfo;
 import com.qaas.crawler.service.CrawlerService;
 import com.qaas.project.settings.ProjectSettingsRepository;
@@ -94,7 +96,8 @@ public class AnalysisPipelineService {
 
             // Step 1: Crawl
             progress.emit(analysisId, new ProgressEvent("CRAWLING", "Crawling " + baseUrl + "…", 5));
-            List<PageInfo> crawled = crawlerService.crawl(baseUrl, crawlOptions);
+            CrawlResult crawlResult = crawlerService.crawl(baseUrl, crawlOptions);
+            List<PageInfo> crawled = crawlResult.pages();
             log.info("Crawled {} pages for analysis {}", crawled.size(), analysisId);
 
             if (crawled.isEmpty()) {
@@ -109,12 +112,18 @@ public class AnalysisPipelineService {
             progress.emit(analysisId, new ProgressEvent("CRAWLING",
                     "Found " + crawled.size() + " page" + (crawled.size() == 1 ? "" : "s"), 20));
 
-            // Steps 2–4: one shared browser for all test executions
+            // Steps 2–5: one shared browser context for all test executions.
+            // If the crawler authenticated, inject the captured storage state so tests
+            // run as the authenticated user rather than as an anonymous visitor.
             try (Playwright pw = Playwright.create()) {
                 Browser browser = pw.chromium().launch(new BrowserType.LaunchOptions()
                         .setHeadless(true)
                         .setChromiumSandbox(false)
                         .setArgs(List.of("--disable-dev-shm-usage", "--no-first-run")));
+                BrowserContext sharedContext = (crawlResult.storageStateJson() != null)
+                        ? browser.newContext(new Browser.NewContextOptions()
+                                .setStorageState(crawlResult.storageStateJson()))
+                        : browser.newContext();
                 try {
                     int total = crawled.size();
                     for (int i = 0; i < total; i++) {
@@ -157,7 +166,7 @@ public class AnalysisPipelineService {
                                 " on " + info.getUrl(), execProgress));
                         for (GeneratedTest test : tests) {
                             try {
-                                TestExecution execution = executionService.execute(test, analysisId, browser);
+                                TestExecution execution = executionService.execute(test, analysisId, sharedContext);
                                 bugDetectionService.detectFromExecution(execution, analysisId);
                             } catch (Exception e) {
                                 log.warn("Execution failed for test '{}': {}", test.getName(), e.getMessage());
@@ -165,6 +174,7 @@ public class AnalysisPipelineService {
                         }
                     }
                 } finally {
+                    sharedContext.close();
                     browser.close();
                 }
             }

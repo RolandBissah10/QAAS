@@ -26,12 +26,12 @@ public class ExecutionService {
         this.playwright = playwright;
     }
 
-    /** Called from the analysis pipeline — reuses a shared browser across all tests. */
+    /** Called from the analysis pipeline — reuses a shared authenticated browser context. */
     @Transactional
-    public TestExecution execute(GeneratedTest test, UUID analysisId, Browser sharedBrowser) {
+    public TestExecution execute(GeneratedTest test, UUID analysisId, BrowserContext sharedContext) {
         TestExecution execution = executions.save(new TestExecution(test));
         try {
-            String failReason = runTest(test, sharedBrowser);
+            String failReason = runTest(test, sharedContext);
             if (failReason == null) execution.pass();
             else execution.fail(failReason);
             try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
@@ -48,12 +48,14 @@ public class ExecutionService {
         TestExecution execution = executions.save(new TestExecution(test));
         try (Playwright pw = Playwright.create()) {
             Browser browser = launchBrowser(pw);
+            BrowserContext context = browser.newContext();
             try {
-                String failReason = runTest(test, browser);
+                String failReason = runTest(test, context);
                 if (failReason == null) execution.pass();
                 else execution.fail(failReason);
                 try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
             } finally {
+                context.close();
                 browser.close();
             }
         } catch (Exception ex) {
@@ -63,17 +65,17 @@ public class ExecutionService {
         return executions.save(execution);
     }
 
-    private String runTest(GeneratedTest test, Browser browser) {
+    private String runTest(GeneratedTest test, BrowserContext context) {
         String type = test.getType() != null ? test.getType() : "smoke";
         return switch (type) {
-            case "functional" -> executeFunctional(test.getTargetUrl(), browser);
-            case "auth"       -> executeAuth(test.getTargetUrl(), browser);
-            default           -> executeSmoke(test.getTargetUrl(), browser);
+            case "functional" -> executeFunctional(test.getTargetUrl(), context);
+            case "auth"       -> executeAuth(test.getTargetUrl(), context);
+            default           -> executeSmoke(test.getTargetUrl(), context);
         };
     }
 
-    private String executeSmoke(String url, Browser browser) {
-        com.microsoft.playwright.Page page = browser.newPage();
+    private String executeSmoke(String url, BrowserContext context) {
+        com.microsoft.playwright.Page page = context.newPage();
         try {
             page.setDefaultNavigationTimeout(15000);
             Response response = page.navigate(url);
@@ -99,8 +101,8 @@ public class ExecutionService {
         }
     }
 
-    private String executeFunctional(String url, Browser browser) {
-        com.microsoft.playwright.Page page = browser.newPage();
+    private String executeFunctional(String url, BrowserContext context) {
+        com.microsoft.playwright.Page page = context.newPage();
         try {
             page.setDefaultNavigationTimeout(15000);
             Response response = page.navigate(url);
@@ -108,7 +110,7 @@ public class ExecutionService {
                 return "HTTP " + (response != null ? response.status() : "no response");
 
             Locator submitBtn = page.locator("button[type=submit], input[type=submit]").first();
-            if (!submitBtn.isVisible()) return executeSmoke(url, browser);
+            if (!submitBtn.isVisible()) return executeSmoke(url, context);
 
             try {
                 submitBtn.click();
@@ -127,8 +129,8 @@ public class ExecutionService {
         }
     }
 
-    private String executeAuth(String url, Browser browser) {
-        com.microsoft.playwright.Page page = browser.newPage();
+    private String executeAuth(String url, BrowserContext context) {
+        com.microsoft.playwright.Page page = context.newPage();
         try {
             page.setDefaultNavigationTimeout(15000);
             Response response = page.navigate(url);

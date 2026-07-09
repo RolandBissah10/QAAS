@@ -18,6 +18,6 @@ public class CrawlerController {
 
     @PostMapping("/start")
     public ResponseEntity<List<PageInfo>> start(@RequestParam String url, @RequestParam(defaultValue = "50") int maxPages) {
-        return ResponseEntity.ok(crawlerService.crawl(url, new CrawlOptions(maxPages, null, null, null, java.util.List.of())));
+        return ResponseEntity.ok(crawlerService.crawl(url, new CrawlOptions(maxPages, null, null, null, java.util.List.of())).pages());
     }
 }

@@ -42,7 +42,8 @@ public class AuthService {
         if (users.existsByEmail(request.email())) {
             throw new BadRequestException("Email is already registered");
         }
-        User user = users.save(new User(request.email(), passwordEncoder.encode(request.password()), Role.OWNER));
+        Role role = users.count() == 0 ? Role.OWNER : Role.VIEWER;
+        User user = users.save(new User(request.email(), passwordEncoder.encode(request.password()), role));
         return issueTokens(user);
     }
 
