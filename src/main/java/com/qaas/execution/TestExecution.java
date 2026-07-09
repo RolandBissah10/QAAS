@@ -21,6 +21,9 @@ public class TestExecution {
     @Column(nullable = false)
     private ExecutionStatus status;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
     @Column(name = "started_at", nullable = false)
     private Instant startedAt;
 
@@ -37,12 +40,14 @@ public class TestExecution {
         this.id = UUID.randomUUID();
         this.test = test;
         this.status = ExecutionStatus.RUNNING;
+        this.createdAt = Instant.now();
         this.startedAt = Instant.now();
     }
 
     public UUID getId() { return id; }
     public GeneratedTest getTest() { return test; }
     public ExecutionStatus getStatus() { return status; }
+    public Instant getCreatedAt() { return createdAt; }
     public Instant getStartedAt() { return startedAt; }
     public Instant getCompletedAt() { return completedAt; }
     public String getErrorMessage() { return errorMessage; }

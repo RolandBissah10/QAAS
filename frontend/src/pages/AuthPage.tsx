@@ -84,7 +84,7 @@ export function AuthPage() {
           </Field>
           {mode === "register" ? (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              New accounts are created as <strong>Owner</strong> with full platform access.
+              New accounts are created as <strong>Viewer</strong> with limited platform access.
             </div>
           ) : null}
           {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
