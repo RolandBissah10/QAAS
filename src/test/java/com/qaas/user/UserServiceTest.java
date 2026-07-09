@@ -7,6 +7,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,12 +31,13 @@ class UserServiceTest {
     @Test
     void listUsersReturnsAllKnownUsers() {
         User user = new User("owner@qaas.dev", "secret", Role.OWNER);
-        when(users.findAll()).thenReturn(List.of(user));
+        Pageable pageable = PageRequest.of(0, 20);
+        when(users.findAll(pageable)).thenReturn(new PageImpl<>(List.of(user)));
 
-        var result = service.listUsers();
+        var result = service.listUsers(pageable);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).email()).isEqualTo("owner@qaas.dev");
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).email()).isEqualTo("owner@qaas.dev");
     }
 
     @Test

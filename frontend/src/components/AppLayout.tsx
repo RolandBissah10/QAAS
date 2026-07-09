@@ -1,18 +1,20 @@
 import {
   BarChart3,
-  Boxes,
-  ClipboardCheck,
+  Bug,
+  FileText,
   FolderKanban,
   Globe2,
   LogOut,
   Moon,
   PlayCircle,
-  ServerCog,
+  ScanLine,
   Sun,
+  TestTube2,
   Users,
+  Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { Button } from "./Button";
 import { useAuth } from "../state/auth";
 import { useTheme } from "../state/theme";
@@ -27,13 +29,15 @@ interface NavItem {
 
 const nav: NavItem[] = [
   { to: "/", label: "Dashboard", icon: BarChart3, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["OWNER"] },
-  { to: "/environments", label: "Environments", icon: Globe2, roles: ["OWNER"] },
-  { to: "/tests", label: "API Tests", icon: ServerCog, roles: ["OWNER", "TESTER"] },
-  { to: "/collections", label: "Collections", icon: Boxes, roles: ["OWNER", "TESTER"] },
-  { to: "/executions", label: "Executions", icon: PlayCircle, roles: ["OWNER", "TESTER"] },
-  { to: "/results", label: "Results", icon: ClipboardCheck, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/users", label: "Users", icon: Users, roles: ["OWNER"] },
+  { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/analysis", label: "Analysis", icon: Zap, roles: ["OWNER", "TESTER"] },
+  { to: "/pages", label: "Pages", icon: Globe2, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/tests", label: "Tests", icon: TestTube2, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/executions", label: "Executions", icon: PlayCircle, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/bugs", label: "Bugs", icon: Bug, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/reports", label: "Reports", icon: FileText, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/elements", label: "UI Elements", icon: ScanLine, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/users", label: "Team", icon: Users, roles: ["OWNER"] },
 ];
 
 export function AppLayout() {
@@ -48,8 +52,8 @@ export function AppLayout() {
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-white md:block">
         <div className="flex h-16 items-center border-b border-line px-5">
           <div>
-            <div className="text-lg font-semibold text-ink">QAAS</div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">API Test Platform</div>
+            <div className="text-lg font-semibold text-ink">QAAS AI</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">Autonomous QA Platform</div>
           </div>
         </div>
         <nav className="grid gap-1 p-3">
@@ -76,13 +80,13 @@ export function AppLayout() {
       <div className="md:pl-64">
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-white px-4 md:px-6">
           <div className="min-w-0 md:hidden">
-            <div className="font-semibold text-ink">QAAS</div>
+            <div className="font-semibold text-ink">QAAS AI</div>
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <div className="hidden min-w-0 text-right text-sm sm:block">
+            <Link to="/profile" className="hidden min-w-0 text-right text-sm sm:block hover:opacity-75 transition-opacity">
               <div className="truncate font-medium text-ink">{user?.displayName || user?.email}</div>
               <div className="text-xs text-slate-500">{user?.role}</div>
-            </div>
+            </Link>
             <Button variant="ghost" onClick={toggleTheme} title={theme === "dark" ? "Use light mode" : "Use dark mode"}>
               <ThemeIcon className="h-4 w-4" />
             </Button>

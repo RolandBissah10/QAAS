@@ -3,9 +3,6 @@ package com.qaas.auth;
 import com.qaas.auth.AuthDtos.AuthResponse;
 import com.qaas.auth.AuthDtos.LoginRequest;
 import com.qaas.auth.AuthDtos.LogoutRequest;
-import com.qaas.auth.AuthDtos.PasswordResetConfirmRequest;
-import com.qaas.auth.AuthDtos.PasswordResetRequest;
-import com.qaas.auth.AuthDtos.PasswordResetTokenResponse;
 import com.qaas.auth.AuthDtos.RefreshRequest;
 import com.qaas.auth.AuthDtos.RegisterRequest;
 import jakarta.validation.Valid;
@@ -45,16 +42,5 @@ public class AuthController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void logout(@Valid @RequestBody LogoutRequest request) {
         service.logout(request.refreshToken());
-    }
-
-    @PostMapping("/password-reset/request")
-    PasswordResetTokenResponse requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
-        return service.requestPasswordReset(request.email());
-    }
-
-    @PostMapping("/password-reset/confirm")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    void confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
-        service.confirmPasswordReset(request);
     }
 }

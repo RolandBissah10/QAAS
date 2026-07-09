@@ -1,140 +1,122 @@
-import { FormEvent, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
-import { Button } from "../components/Button";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
-import { Field, SelectInput, TextArea, TextInput } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
-import { environmentApi, projectApi, testApi } from "../lib/api";
-import { errorMessage, parseJsonObject } from "../lib/errors";
-import type { HttpMethod } from "../lib/types";
+import { Pagination } from "../components/Pagination";
+import { StatusPill } from "../components/StatusPill";
+import { analysisApi, projectApi, testApi } from "../lib/api";
+import { errorMessage } from "../lib/errors";
+import type { GeneratedTest, PagedResponse } from "../lib/types";
+
+const selectCls =
+  "rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand";
 
 export function TestsPage() {
-  const queryClient = useQueryClient();
+  const [selectedProject, setSelectedProject] = useState("");
+  const [selectedAnalysis, setSelectedAnalysis] = useState("");
+  const [page, setPage] = useState(0);
+
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
-  const environments = useQuery({ queryKey: ["environments"], queryFn: environmentApi.list });
-  const tests = useQuery({ queryKey: ["tests"], queryFn: testApi.list });
-  const [projectId, setProjectId] = useState("");
-  const [environmentId, setEnvironmentId] = useState("");
-  const [name, setName] = useState("Health check");
-  const [method, setMethod] = useState<HttpMethod>("GET");
-  const [endpoint, setEndpoint] = useState("/health");
-  const [expectedStatusCode, setExpectedStatusCode] = useState(200);
-  const [headers, setHeaders] = useState("{}");
-  const [requestBody, setRequestBody] = useState("{}");
-  const [expectedResponse, setExpectedResponse] = useState("{}");
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const save = useMutation({
-    mutationFn: testApi.create,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["tests"] }),
+  const analyses = useQuery({
+    queryKey: ["analyses-dropdown", selectedProject],
+    queryFn: () => analysisApi.byProject(selectedProject, 0, 100),
+    enabled: !!selectedProject,
   });
-  const remove = useMutation({
-    mutationFn: testApi.remove,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["tests"] }),
+  const tests = useQuery<PagedResponse<GeneratedTest>>({
+    queryKey: ["tests", selectedAnalysis, page],
+    queryFn: () => testApi.byAnalysis(selectedAnalysis, page),
+    enabled: !!selectedAnalysis,
   });
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    setFormError(null);
-    try {
-      save.mutate({
-        projectId,
-        environmentId,
-        name,
-        method,
-        endpoint,
-        headers: parseJsonObject(headers),
-        requestBody: parseJsonObject(requestBody),
-        expectedStatusCode,
-        expectedResponse: parseJsonObject(expectedResponse),
-      });
-    } catch (error) {
-      setFormError(errorMessage(error));
-    }
-  }
+  const testsContent = tests.data?.content ?? [];
+  const passed = testsContent.filter((t) => t.status === "passed").length;
+  const failed = testsContent.filter((t) => t.status === "failed").length;
 
   return (
     <>
-      <PageHeader title="API Tests" description="Store request definitions and expected responses for repeatable checks." />
-      <div className="grid gap-6 p-4 sm:p-6 2xl:grid-cols-[minmax(560px,640px)_1fr]">
-        <form className="grid content-start gap-5 rounded-md border border-line bg-white p-4 sm:p-5" onSubmit={submit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Project">
-              <SelectInput value={projectId} onChange={(event) => setProjectId(event.target.value)} required>
-                <option value="">Select</option>
-                {projects.data?.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
-              </SelectInput>
-            </Field>
-            <Field label="Environment">
-              <SelectInput value={environmentId} onChange={(event) => setEnvironmentId(event.target.value)} required>
-                <option value="">Select</option>
-                {environments.data?.map((environment) => <option key={environment.id} value={environment.id}>{environment.name}</option>)}
-              </SelectInput>
-            </Field>
-          </div>
-
-          <Field label="Name">
-            <TextInput value={name} onChange={(event) => setName(event.target.value)} required />
-          </Field>
-
-          <div className="grid gap-4 lg:grid-cols-[150px_minmax(0,1fr)_150px]">
-            <Field label="Method">
-              <SelectInput value={method} onChange={(event) => setMethod(event.target.value as HttpMethod)}>
-                {["GET", "POST", "PUT", "PATCH", "DELETE"].map((item) => <option key={item}>{item}</option>)}
-              </SelectInput>
-            </Field>
-            <Field label="Endpoint">
-              <TextInput value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="/health" required />
-            </Field>
-            <Field label="Expected Status">
-              <TextInput
-                type="number"
-                min={100}
-                max={599}
-                value={expectedStatusCode}
-                onChange={(event) => setExpectedStatusCode(Number(event.target.value))}
-                required
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Headers JSON">
-              <TextArea className="min-h-32 font-mono" value={headers} onChange={(event) => setHeaders(event.target.value)} />
-            </Field>
-            <Field label="Request Body JSON">
-              <TextArea className="min-h-32 font-mono" value={requestBody} onChange={(event) => setRequestBody(event.target.value)} />
-            </Field>
-            <Field label="Expected Response JSON" className="lg:col-span-2">
-              <TextArea className="min-h-36 font-mono" value={expectedResponse} onChange={(event) => setExpectedResponse(event.target.value)} />
-            </Field>
-          </div>
-
-          {formError || save.isError ? <div className="text-sm text-red-700">{formError ?? errorMessage(save.error)}</div> : null}
-          <Button className="w-full sm:w-fit" loading={save.isPending} type="submit">
-            <Plus className="h-4 w-4" />
-            Add test
-          </Button>
-        </form>
-        <div className="rounded-md border border-line bg-white">
-          <div className="border-b border-line px-4 py-3 text-sm font-semibold">Test Registry</div>
-          {tests.isLoading ? <LoadingState /> : null}
-          {tests.isError ? <ErrorState message={errorMessage(tests.error)} /> : null}
-          {tests.data && tests.data.length === 0 ? <EmptyState title="No API tests saved." /> : null}
-          <div className="grid gap-3 p-4">
-            {tests.data?.map((test) => (
-              <div key={test.id} className="grid gap-3 rounded-md border border-line p-3 lg:grid-cols-[1fr_auto] lg:items-center">
-                <div className="min-w-0">
-                  <div className="font-medium text-ink">{test.name}</div>
-                  <div className="mt-1 break-all text-sm text-slate-500">{test.method} {test.endpoint} - expected {test.expectedStatusCode}</div>
-                </div>
-                <Button className="w-full sm:w-fit" variant="danger" onClick={() => remove.mutate(test.id)} title="Delete test">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
+      <PageHeader
+        title="Generated Tests"
+        description="UI test cases generated automatically from discovered pages."
+      />
+      <div className="grid gap-4 p-4 sm:p-6">
+        <div className="flex flex-wrap gap-3">
+          <select
+            className={selectCls}
+            value={selectedProject}
+            onChange={(e) => { setSelectedProject(e.target.value); setSelectedAnalysis(""); setPage(0); }}
+          >
+            <option value="">Select project…</option>
+            {projects.data?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
+          </select>
+          <select
+            className={selectCls}
+            value={selectedAnalysis}
+            onChange={(e) => { setSelectedAnalysis(e.target.value); setPage(0); }}
+            disabled={!selectedProject}
+          >
+            <option value="">Select analysis…</option>
+            {analyses.data?.content.map((a) => (
+              <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
+            ))}
+          </select>
+        </div>
+
+        {(tests.data?.totalElements ?? 0) > 0 && (
+          <div className="flex gap-4">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
+              Passed: <span className="font-bold">{passed}</span>
+            </div>
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              Failed: <span className="font-bold">{failed}</span>
+            </div>
+            <div className="rounded-md border border-line bg-white px-4 py-2 text-sm text-slate-600">
+              Total: <span className="font-bold">{tests.data!.totalElements}</span>
+            </div>
           </div>
+        )}
+
+        <div className="rounded-md border border-line bg-white">
+          <div className="border-b border-line px-4 py-3 text-sm font-semibold">
+            Test Cases {tests.data ? `(${tests.data.totalElements})` : ""}
+          </div>
+          {!selectedAnalysis ? (
+            <EmptyState title="Select a project and analysis to view generated tests." />
+          ) : tests.isLoading ? (
+            <LoadingState />
+          ) : tests.isError ? (
+            <ErrorState message={errorMessage(tests.error)} />
+          ) : tests.data?.totalElements === 0 ? (
+            <EmptyState title="No tests generated for this analysis yet." />
+          ) : (
+            <>
+              <div className="divide-y divide-line">
+                {testsContent.map((test) => (
+                  <div key={test.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-ink">{test.name}</div>
+                      {test.targetUrl && (
+                        <div className="mt-0.5 truncate text-xs text-slate-500">{test.targetUrl}</div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        {test.type}
+                      </span>
+                      <StatusPill status={test.status.toUpperCase()} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <Pagination
+                page={page}
+                totalPages={tests.data?.totalPages ?? 1}
+                totalElements={tests.data?.totalElements ?? 0}
+                onPageChange={setPage}
+              />
+            </>
+          )}
         </div>
       </div>
     </>

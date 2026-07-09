@@ -1,45 +1,43 @@
 package com.qaas.dashboard;
 
-import com.qaas.dashboard.DashboardDtos.SummaryResponse;
-import com.qaas.dashboard.DashboardDtos.TrendPoint;
+import com.qaas.analysis.repository.AnalysisRepository;
+import com.qaas.bug.BugRepository;
+import com.qaas.bug.Severity;
 import com.qaas.execution.ExecutionStatus;
 import com.qaas.execution.TestExecutionRepository;
-import com.qaas.result.TestResultRepository;
-import com.qaas.test.ApiTestRepository;
+import com.qaas.page.repository.PageRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.List;
-
 @Service
 public class DashboardService {
-    private final ApiTestRepository tests;
+    private final AnalysisRepository analyses;
+    private final PageRepository pages;
     private final TestExecutionRepository executions;
-    private final TestResultRepository results;
+    private final BugRepository bugs;
 
-    public DashboardService(ApiTestRepository tests, TestExecutionRepository executions, TestResultRepository results) {
-        this.tests = tests;
+    public DashboardService(AnalysisRepository analyses, PageRepository pages,
+                            TestExecutionRepository executions, BugRepository bugs) {
+        this.analyses = analyses;
+        this.pages = pages;
         this.executions = executions;
-        this.results = results;
+        this.bugs = bugs;
     }
 
     @Transactional(readOnly = true)
-    public SummaryResponse summary() {
-        long totalTests = tests.count();
+    public DashboardDtos.SummaryResponse summary() {
+        long appCount = analyses.count();
+        long pageCount = pages.count();
         long passed = executions.countByStatus(ExecutionStatus.PASSED);
-        long failed = executions.countByStatus(ExecutionStatus.FAILED) + executions.countByStatus(ExecutionStatus.ERROR);
-        long totalRuns = passed + failed;
-        double passRate = totalRuns == 0 ? 0 : (passed * 100.0) / totalRuns;
-        return new SummaryResponse(totalTests, passed, failed, passRate, results.averageResponseTime());
-    }
+        long failed = executions.countByStatus(ExecutionStatus.FAILED)
+                + executions.countByStatus(ExecutionStatus.ERROR);
+        long total = passed + failed;
+        double passRate = total == 0 ? 0.0 : (passed * 100.0) / total;
+        long bugCount = bugs.count();
+        long criticalBugs = bugs.countBySeverity(Severity.CRITICAL);
 
-    @Transactional(readOnly = true)
-    public List<TrendPoint> trends() {
-        return executions.findTop30ByExecutedAtAfterOrderByExecutedAtAsc(Instant.now().minus(30, ChronoUnit.DAYS))
-                .stream()
-                .map(execution -> new TrendPoint(execution.getExecutedAt(), execution.getStatus()))
-                .toList();
+        return new DashboardDtos.SummaryResponse(
+                appCount, pageCount, total, passed, failed, passRate, bugCount, criticalBugs
+        );
     }
 }

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 import { Moon, ShieldCheck, Sun } from "lucide-react";
 import { Button } from "../components/Button";
 import { Field, TextInput } from "../components/Field";
@@ -16,8 +16,7 @@ export function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setLoading(true);
     setError(null);
     try {
@@ -41,8 +40,8 @@ export function AuthPage() {
             <ShieldCheck className="h-6 w-6" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-semibold text-ink">QAAS Console</h1>
-            <p className="text-sm text-slate-500">Sign in to manage API quality runs.</p>
+            <h1 className="text-xl font-semibold text-ink">QAAS AI</h1>
+            <p className="text-sm text-slate-500">Autonomous software quality platform.</p>
           </div>
           <Button variant="ghost" type="button" onClick={toggleTheme} title={theme === "dark" ? "Use light mode" : "Use dark mode"}>
             <ThemeIcon className="h-4 w-4" />
@@ -50,19 +49,27 @@ export function AuthPage() {
         </div>
         <div className="mb-5 grid grid-cols-2 rounded-md border border-line bg-panel p-1">
           <button
+            type="button"
             className={`h-9 rounded text-sm font-medium ${mode === "login" ? "bg-white text-ink shadow-sm" : "text-slate-500"}`}
             onClick={() => setMode("login")}
           >
             Login
           </button>
           <button
+            type="button"
             className={`h-9 rounded text-sm font-medium ${mode === "register" ? "bg-white text-ink shadow-sm" : "text-slate-500"}`}
             onClick={() => setMode("register")}
           >
             Register
           </button>
         </div>
-        <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
           <Field label="Email">
             <TextInput type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
           </Field>
@@ -77,7 +84,7 @@ export function AuthPage() {
           </Field>
           {mode === "register" ? (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-              New accounts are created as Viewer by default. Owners can promote users from the Users page.
+              New accounts are created as <strong>Owner</strong> with full platform access.
             </div>
           ) : null}
           {error ? <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}

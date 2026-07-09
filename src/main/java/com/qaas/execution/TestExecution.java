@@ -1,49 +1,60 @@
 package com.qaas.execution;
 
-import com.qaas.common.BaseEntity;
-import com.qaas.test.ApiTest;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import com.qaas.generator.entity.GeneratedTest;
+import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "executions")
-public class TestExecution extends BaseEntity {
+public class TestExecution {
+    @Id
+    @Column(columnDefinition = "uuid")
+    private UUID id;
+
     @ManyToOne(optional = false)
     @JoinColumn(name = "test_id")
-    private ApiTest test;
+    private GeneratedTest test;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ExecutionStatus status;
 
-    @Column(name = "executed_at", nullable = false)
-    private Instant executedAt;
+    @Column(name = "started_at", nullable = false)
+    private Instant startedAt;
+
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
+    @Column(name = "error_message", length = 2000)
+    private String errorMessage;
 
     protected TestExecution() {
     }
 
-    public TestExecution(ApiTest test, ExecutionStatus status) {
+    public TestExecution(GeneratedTest test) {
+        this.id = UUID.randomUUID();
         this.test = test;
-        this.status = status;
-        this.executedAt = Instant.now();
+        this.status = ExecutionStatus.RUNNING;
+        this.startedAt = Instant.now();
     }
 
-    public ApiTest getTest() {
-        return test;
+    public UUID getId() { return id; }
+    public GeneratedTest getTest() { return test; }
+    public ExecutionStatus getStatus() { return status; }
+    public Instant getStartedAt() { return startedAt; }
+    public Instant getCompletedAt() { return completedAt; }
+    public String getErrorMessage() { return errorMessage; }
+
+    public void pass() {
+        this.status = ExecutionStatus.PASSED;
+        this.completedAt = Instant.now();
     }
 
-    public ExecutionStatus getStatus() {
-        return status;
-    }
-
-    public Instant getExecutedAt() {
-        return executedAt;
+    public void fail(String errorMessage) {
+        this.status = ExecutionStatus.FAILED;
+        this.completedAt = Instant.now();
+        this.errorMessage = errorMessage;
     }
 }

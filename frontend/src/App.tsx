@@ -4,26 +4,21 @@ import { useAuth } from "./state/auth";
 import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
-import { EnvironmentsPage } from "./pages/EnvironmentsPage";
+import { AnalysisPage } from "./pages/AnalysisPage";
+import { PagesPage } from "./pages/PagesPage";
 import { TestsPage } from "./pages/TestsPage";
-import { CollectionsPage } from "./pages/CollectionsPage";
 import { ExecutionsPage } from "./pages/ExecutionsPage";
+import { BugsPage } from "./pages/BugsPage";
+import { ReportsPage } from "./pages/ReportsPage";
 import { ResultsPage } from "./pages/ResultsPage";
+import { UIElementsPage } from "./pages/UIElementsPage";
 import { UsersPage } from "./pages/UsersPage";
-import type { Role } from "./lib/types";
+import { AnalysisDetailPage } from "./pages/AnalysisDetailPage";
+import { ProfilePage } from "./pages/ProfilePage";
 
 function ProtectedRoute() {
   const { accessToken } = useAuth();
   return accessToken ? <AppLayout /> : <Navigate to="/login" replace />;
-}
-
-
-function RoleRoute({ allowedRoles, element }: { allowedRoles: Role[]; element: JSX.Element }) {
-  const { accessToken, user } = useAuth();
-  if (!accessToken) {
-    return <Navigate to="/login" replace />;
-  }
-  return user && allowedRoles.includes(user.role) ? element : <Navigate to="/" replace />;
 }
 
 export function App() {
@@ -33,14 +28,19 @@ export function App() {
     <Routes>
       <Route path="/login" element={accessToken ? <Navigate to="/" replace /> : <AuthPage />} />
       <Route element={<ProtectedRoute />}>
-        <Route path="/" element={<RoleRoute allowedRoles={["OWNER", "TESTER", "VIEWER"]} element={<DashboardPage />} />} />
-        <Route path="/projects" element={<RoleRoute allowedRoles={["OWNER"]} element={<ProjectsPage />} />} />
-        <Route path="/environments" element={<RoleRoute allowedRoles={["OWNER"]} element={<EnvironmentsPage />} />} />
-        <Route path="/tests" element={<RoleRoute allowedRoles={["OWNER", "TESTER"]} element={<TestsPage />} />} />
-        <Route path="/collections" element={<RoleRoute allowedRoles={["OWNER", "TESTER"]} element={<CollectionsPage />} />} />
-        <Route path="/executions" element={<RoleRoute allowedRoles={["OWNER", "TESTER"]} element={<ExecutionsPage />} />} />
-        <Route path="/results" element={<RoleRoute allowedRoles={["OWNER", "TESTER", "VIEWER"]} element={<ResultsPage />} />} />
-        <Route path="/users" element={<RoleRoute allowedRoles={["OWNER"]} element={<UsersPage />} />} />
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/analysis" element={<AnalysisPage />} />
+        <Route path="/analysis/:id" element={<AnalysisDetailPage />} />
+        <Route path="/pages" element={<PagesPage />} />
+        <Route path="/tests" element={<TestsPage />} />
+        <Route path="/executions" element={<ExecutionsPage />} />
+        <Route path="/bugs" element={<BugsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/results" element={<ResultsPage />} />
+        <Route path="/elements" element={<UIElementsPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
       </Route>
       <Route path="*" element={<Navigate to={accessToken ? "/" : "/login"} replace />} />
     </Routes>

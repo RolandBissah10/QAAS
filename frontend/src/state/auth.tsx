@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { authApi, setAccessToken } from "../lib/api";
 import type { AuthResponse, User } from "../lib/types";
 
@@ -9,38 +9,56 @@ interface AuthState {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (user: User) => void;
 }
 
 const STORAGE_KEY = "qaas.auth";
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<AuthResponse | null>(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AuthResponse) : null;
-  });
+function loadSession(): AuthResponse | null {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return null;
+  const s = JSON.parse(raw) as AuthResponse;
+  // Set the token synchronously so the first render already has auth headers
+  setAccessToken(s.accessToken);
+  return s;
+}
 
-  useEffect(() => {
-    setAccessToken(session?.accessToken ?? null);
-    if (session) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  }, [session]);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<AuthResponse | null>(loadSession);
 
   const value = useMemo<AuthState>(
     () => ({
       user: session?.user ?? null,
       accessToken: session?.accessToken ?? null,
       refreshToken: session?.refreshToken ?? null,
-      login: async (email, password) => setSession(await authApi.login({ email, password })),
-      register: async (email, password) => setSession(await authApi.register({ email, password })),
+      login: async (email, password) => {
+        const result = await authApi.login({ email, password });
+        setAccessToken(result.accessToken);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+        setSession(result);
+      },
+      register: async (email, password) => {
+        const result = await authApi.register({ email, password });
+        setAccessToken(result.accessToken);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+        setSession(result);
+      },
       logout: async () => {
         if (session?.refreshToken) {
           await authApi.logout(session.refreshToken).catch(() => undefined);
         }
+        setAccessToken(null);
+        localStorage.removeItem(STORAGE_KEY);
         setSession(null);
+      },
+      updateUser: (user: User) => {
+        setSession((prev) => {
+          if (!prev) return prev;
+          const next = { ...prev, user };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
       },
     }),
     [session],

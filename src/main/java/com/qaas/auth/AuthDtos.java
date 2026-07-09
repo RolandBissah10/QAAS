@@ -1,10 +1,8 @@
 package com.qaas.auth;
 
-import com.qaas.user.Role;
 import com.qaas.user.UserDto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public final class AuthDtos {
@@ -24,15 +22,6 @@ public final class AuthDtos {
     }
 
     public record LogoutRequest(@NotBlank String refreshToken) {
-    }
-
-    public record PasswordResetRequest(@Email @NotBlank String email) {
-    }
-
-    public record PasswordResetConfirmRequest(@NotBlank String token, @Size(min = 8, max = 100) String newPassword) {
-    }
-
-    public record PasswordResetTokenResponse(String resetToken) {
     }
 
     public record AuthResponse(String accessToken, String refreshToken, UserDto user) {

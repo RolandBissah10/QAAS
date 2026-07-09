@@ -1,13 +1,14 @@
 package com.qaas.user;
 
+import com.qaas.common.PagedResponse;
 import com.qaas.exception.BadRequestException;
 import com.qaas.exception.NotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -25,10 +26,12 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public List<UserDto> listUsers() {
+    public PagedResponse<UserDto> listUsers(Pageable pageable) {
         try {
             log.debug("listUsers invoked");
-            return users.findAll().stream().map(UserDto::from).toList();
+            var paged = users.findAll(pageable);
+            return PagedResponse.fromMapped(paged, paged.getContent().stream()
+                    .map(UserDto::from).toList());
         } catch (Exception ex) {
             log.error("Unexpected error in listUsers", ex);
             throw ex;

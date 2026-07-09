@@ -1,22 +1,18 @@
 package com.qaas.project;
 
+import com.qaas.analysis.repository.AnalysisRepository;
+import com.qaas.bug.BugRepository;
 import com.qaas.exception.NotFoundException;
+import com.qaas.execution.TestExecutionRepository;
+import com.qaas.generator.repository.GeneratedTestRepository;
+import com.qaas.page.repository.PageRepository;
 import com.qaas.project.ProjectDtos.ProjectRequest;
 import com.qaas.project.ProjectDtos.ProjectResponse;
+import com.qaas.project.entity.Project;
+import com.qaas.project.repository.ProjectRepository;
+import com.qaas.report.ReportRepository;
 import com.qaas.user.User;
 import com.qaas.user.UserService;
-import com.qaas.test.ApiTest;
-import com.qaas.test.ApiTestRepository;
-import com.qaas.execution.TestExecution;
-import com.qaas.execution.TestExecutionRepository;
-import com.qaas.result.TestResultRepository;
-import com.qaas.collection.TestCollection;
-import com.qaas.collection.TestCollectionRepository;
-import com.qaas.environment.EnvironmentConfig;
-import com.qaas.environment.EnvironmentRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,31 +21,36 @@ import java.util.UUID;
 
 @Service
 public class ProjectService {
-    private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
     private final ProjectRepository projects;
     private final UserService users;
-    private final ApiTestRepository apiTests;
+    private final AnalysisRepository analyses;
+    private final PageRepository pages;
+    private final GeneratedTestRepository generatedTests;
     private final TestExecutionRepository executions;
-    private final TestResultRepository results;
-    private final TestCollectionRepository collections;
-    private final EnvironmentRepository environments;
-    private final EntityManager em;
+    private final BugRepository bugs;
+    private final ReportRepository reports;
 
-    public ProjectService(ProjectRepository projects, UserService users, ApiTestRepository apiTests, TestExecutionRepository executions, TestResultRepository results, TestCollectionRepository collections, EnvironmentRepository environments, EntityManager em) {
+    public ProjectService(ProjectRepository projects, UserService users, AnalysisRepository analyses,
+                          PageRepository pages, GeneratedTestRepository generatedTests,
+                          TestExecutionRepository executions, BugRepository bugs, ReportRepository reports) {
         this.projects = projects;
         this.users = users;
-        this.apiTests = apiTests;
+        this.analyses = analyses;
+        this.pages = pages;
+        this.generatedTests = generatedTests;
         this.executions = executions;
-        this.results = results;
-        this.collections = collections;
-        this.environments = environments;
-        this.em = em;
+        this.bugs = bugs;
+        this.reports = reports;
     }
 
     @Transactional
     public ProjectResponse create(String ownerEmail, ProjectRequest request) {
         User owner = users.currentUser(ownerEmail);
-        return ProjectResponse.from(projects.save(new Project(request.name(), request.description(), owner)));
+        Project p = new Project();
+        p.setName(request.name());
+        p.setDescription(request.description());
+        p.setOwnerId(owner.getId());
+        return ProjectResponse.from(projects.save(p));
     }
 
     @Transactional(readOnly = true)
@@ -70,37 +71,25 @@ public class ProjectService {
     @Transactional
     public ProjectResponse update(UUID id, ProjectRequest request) {
         Project project = get(id);
-        project.update(request.name(), request.description());
+        project.setName(request.name());
+        project.setDescription(request.description());
         return ProjectResponse.from(project);
     }
 
     @Transactional
     public void delete(UUID id) {
-        try {
-            // delete results -> executions -> collections (join entries removed) -> tests -> environments -> project
-            results.deleteByProjectId(id);
-            em.flush();
-
-            executions.deleteByProjectId(id);
-            em.flush();
-
-            // delete collections first so join table entries are removed
-            collections.deleteByProjectId(id);
-            em.flush();
-
-            // then delete tests
-            apiTests.deleteByProjectId(id);
-            em.flush();
-
-            // delete environments
-            environments.deleteByProjectId(id);
-            em.flush();
-
-            Project project = get(id);
-            projects.delete(project);
-        } catch (Exception e) {
-            log.error("Failed to delete project {}", id, e);
-            throw e;
-        }
+        Project project = get(id);
+        analyses.findByProjectId(id).forEach(analysis -> {
+            UUID analysisId = analysis.getId();
+            bugs.deleteAll(bugs.findByAnalysisId(analysisId));
+            reports.deleteAll(reports.findByAnalysisId(analysisId));
+            executions.deleteAll(executions.findByAnalysisId(analysisId));
+            pages.findByAnalysisId(analysisId).forEach(page ->
+                generatedTests.deleteAll(generatedTests.findByPageId(page.getId()))
+            );
+            pages.deleteAll(pages.findByAnalysisId(analysisId));
+        });
+        analyses.deleteAll(analyses.findByProjectId(id));
+        projects.delete(project);
     }
 }

@@ -1,50 +1,40 @@
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
-import { StatusPill } from "../components/StatusPill";
-import { resultApi } from "../lib/api";
+import { dashboardApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 
 export function ResultsPage() {
-  const results = useQuery({ queryKey: ["results"], queryFn: resultApi.list });
+  const summary = useQuery({ queryKey: ["dashboard-summary"], queryFn: dashboardApi.summary });
 
   return (
     <>
-      <PageHeader title="Results" description="Review stored execution output and timing." />
+      <PageHeader title="Results Overview" description="High-level quality metrics across all analyses." />
       <div className="p-4 sm:p-6">
-        <div className="overflow-hidden rounded-md border border-line bg-white">
-          {results.isLoading ? <LoadingState /> : null}
-          {results.isError ? <ErrorState message={errorMessage(results.error)} /> : null}
-          {results.data && results.data.length === 0 ? <EmptyState title="No execution results yet." /> : null}
-          {results.data && results.data.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] border-collapse text-left text-sm">
-                <thead className="bg-panel text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Response Time</th>
-                    <th className="px-4 py-3">Executed</th>
-                    <th className="px-4 py-3">Response Body</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.data.map((result) => (
-                    <tr key={result.id} className="border-t border-line align-top">
-                      <td className="px-4 py-3"><StatusPill status={result.status} /></td>
-                      <td className="px-4 py-3">{result.responseTime} ms</td>
-                      <td className="px-4 py-3 text-slate-500">{new Date(result.executedAt).toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        <pre className="max-h-32 max-w-[70vw] overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100 md:max-w-none">
-                          {JSON.stringify(result.responseBody, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-        </div>
+        {summary.isLoading ? <LoadingState /> : null}
+        {summary.isError ? <ErrorState message={errorMessage(summary.error)} /> : null}
+        {summary.data ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Applications Analyzed", value: summary.data.applicationsAnalyzed },
+              { label: "Pages Discovered", value: summary.data.pagesDiscovered },
+              { label: "Tests Executed", value: summary.data.testsExecuted },
+              { label: "Pass Rate", value: `${summary.data.passRate.toFixed(1)}%` },
+              { label: "Tests Passed", value: summary.data.passedTests },
+              { label: "Tests Failed", value: summary.data.failedTests },
+              { label: "Total Bugs", value: summary.data.bugCount },
+              { label: "Critical Bugs", value: summary.data.criticalBugs },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-md border border-line bg-white p-4">
+                <div className="text-2xl font-bold text-ink">{value}</div>
+                <div className="mt-1 text-sm text-slate-500">{label}</div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {summary.data && summary.data.testsExecuted === 0 ? (
+          <EmptyState title="No execution data yet. Start an analysis to see results." />
+        ) : null}
       </div>
     </>
   );

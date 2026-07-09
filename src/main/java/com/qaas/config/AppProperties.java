@@ -5,10 +5,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "qaas")
-public record AppProperties(Jwt jwt, Cors cors) {
+public record AppProperties(Jwt jwt, Cors cors, Mail mail) {
     public record Jwt(String secret, long accessTokenMinutes, long refreshTokenDays) {
     }
 
     public record Cors(List<String> allowedOrigins) {
+    }
+
+    public record Mail(boolean enabled, String from) {
     }
 }

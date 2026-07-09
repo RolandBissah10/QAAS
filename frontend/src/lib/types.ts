@@ -1,6 +1,17 @@
 export type Role = "OWNER" | "TESTER" | "VIEWER";
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type ExecutionStatus = "PASSED" | "FAILED" | "ERROR";
+
+export interface PagedResponse<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+export type ExecutionStatus = "RUNNING" | "PASSED" | "FAILED" | "ERROR";
+export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type BugStatus = "OPEN" | "CONFIRMED" | "FIXED" | "WONT_FIX";
+export type ReportFormat = "PDF" | "HTML" | "JSON";
+export type AnalysisStatus = "RUNNING" | "COMPLETED" | "FAILED";
 
 export interface User {
   id: string;
@@ -24,53 +35,100 @@ export interface Project {
   createdAt: string;
 }
 
-export interface EnvironmentConfig {
+export interface Analysis {
   id: string;
   projectId: string;
-  name: string;
-  baseUrl: string;
+  url: string;
+  status: AnalysisStatus;
+  startedAt: string;
+  completedAt?: string;
 }
 
-export interface ApiTest {
+export interface DiscoveredPage {
   id: string;
-  projectId: string;
-  environmentId: string;
-  name: string;
-  method: HttpMethod;
-  endpoint: string;
-  headers: Record<string, unknown>;
-  requestBody: Record<string, unknown>;
-  expectedStatusCode: number;
-  expectedResponse: Record<string, unknown>;
+  analysisId: string;
+  url: string;
+  title?: string;
+  pageType?: string;
+  discoveredAt: string;
 }
 
-export interface TestCollection {
+export interface GeneratedTest {
   id: string;
-  projectId: string;
+  pageId: string;
   name: string;
-  description?: string;
-  testIds: string[];
+  type: string;
+  status: string;
+  targetUrl?: string;
 }
 
-export interface Result {
+export interface TestExecution {
+  id: string;
+  testId: string;
+  testName: string;
+  status: ExecutionStatus;
+  startedAt: string;
+  completedAt?: string;
+  errorMessage?: string;
+}
+
+export interface Bug {
   id: string;
   executionId: string;
-  status: ExecutionStatus;
-  responseTime: number;
-  responseBody: Record<string, unknown>;
-  passed: boolean;
-  executedAt: string;
+  analysisId: string;
+  title: string;
+  description?: string;
+  severity: Severity;
+  status: BugStatus;
+  detectedAt: string;
+}
+
+export interface Report {
+  id: string;
+  analysisId: string;
+  format: ReportFormat;
+  filePath?: string;
+  generatedAt: string;
+  qualityScore?: number;
+  totalTests?: number;
+  passedTests?: number;
+  failedTests?: number;
+  bugCount?: number;
+  pagesDiscovered?: number;
+}
+
+export interface ProjectSettings {
+  id?: string;
+  maxPages: number;
+  authUrl?: string;
+  authUsername?: string;
+  authConfigured: boolean;
+  excludedPatterns?: string;
+  updatedAt?: string;
+}
+
+export interface Screenshot {
+  id: string;
+  analysisId: string;
+  path: string;
+  capturedAt: string;
+}
+
+export interface UIElement {
+  id: string;
+  pageId: string;
+  elementType: string;
+  selector: string;
+  label: string;
 }
 
 export interface DashboardSummary {
-  totalTests: number;
+  applicationsAnalyzed: number;
+  pagesDiscovered: number;
+  testsExecuted: number;
   passedTests: number;
   failedTests: number;
   passRate: number;
-  averageResponseTime: number;
-}
-
-export interface TrendPoint {
-  executedAt: string;
-  status: ExecutionStatus;
+  bugCount: number;
+  criticalBugs: number;
 }
