@@ -1,5 +1,7 @@
 package com.qaas.analysis.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
@@ -8,7 +10,11 @@ import com.qaas.analysis.ProgressEmitterRegistry;
 import com.qaas.analysis.dto.ProgressEvent;
 import com.qaas.analysis.entity.Analysis;
 import com.qaas.analysis.repository.AnalysisRepository;
+import com.qaas.apitest.entity.ApiEndpoint;
+import com.qaas.apitest.repository.ApiEndpointRepository;
+import com.qaas.apitest.service.ApiTestGenerationService;
 import com.qaas.bug.BugDetectionService;
+import com.qaas.crawler.dto.ApiEndpointInfo;
 import com.qaas.crawler.dto.CrawlOptions;
 import com.qaas.crawler.dto.CrawlResult;
 import com.qaas.crawler.dto.PageInfo;
@@ -31,6 +37,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -51,6 +58,9 @@ public class AnalysisPipelineService {
     private final ProgressEmitterRegistry progress;
     private final ProjectSettingsRepository projectSettingsRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ApiEndpointRepository apiEndpointRepository;
+    private final ApiTestGenerationService apiTestGenerationService;
+    private final ObjectMapper objectMapper;
 
     public AnalysisPipelineService(AnalysisRepository analysisRepository,
                                    CrawlerService crawlerService,
@@ -62,7 +72,10 @@ public class AnalysisPipelineService {
                                    ReportService reportService,
                                    ProgressEmitterRegistry progress,
                                    ProjectSettingsRepository projectSettingsRepository,
-                                   ApplicationEventPublisher eventPublisher) {
+                                   ApplicationEventPublisher eventPublisher,
+                                   ApiEndpointRepository apiEndpointRepository,
+                                   ApiTestGenerationService apiTestGenerationService,
+                                   ObjectMapper objectMapper) {
         this.analysisRepository = analysisRepository;
         this.crawlerService = crawlerService;
         this.pageRepository = pageRepository;
@@ -74,6 +87,9 @@ public class AnalysisPipelineService {
         this.progress = progress;
         this.projectSettingsRepository = projectSettingsRepository;
         this.eventPublisher = eventPublisher;
+        this.apiEndpointRepository = apiEndpointRepository;
+        this.apiTestGenerationService = apiTestGenerationService;
+        this.objectMapper = objectMapper;
     }
 
     @Async
@@ -109,8 +125,24 @@ public class AnalysisPipelineService {
                 return;
             }
 
+            // Persist API endpoints observed during the crawl
+            List<ApiEndpoint> persistedEndpoints = new ArrayList<>();
+            for (ApiEndpointInfo info : crawlResult.apiEndpoints()) {
+                try {
+                    persistedEndpoints.add(apiEndpointRepository.save(
+                            new ApiEndpoint(analysisId, info.method(), info.url(), info.status())));
+                } catch (Exception e) {
+                    log.warn("Could not persist API endpoint {}: {}", info.url(), e.getMessage());
+                }
+            }
+            if (!persistedEndpoints.isEmpty()) {
+                log.info("Persisted {} API endpoints for analysis {}", persistedEndpoints.size(), analysisId);
+            }
+
             progress.emit(analysisId, new ProgressEvent("CRAWLING",
-                    "Found " + crawled.size() + " page" + (crawled.size() == 1 ? "" : "s"), 20));
+                    "Found " + crawled.size() + " page" + (crawled.size() == 1 ? "" : "s")
+                    + (persistedEndpoints.isEmpty() ? "" : " and " + persistedEndpoints.size() + " API endpoint(s)"),
+                    20));
 
             // Steps 2–5: one shared browser context for all test executions.
             // If the crawler authenticated, inject the captured storage state so tests
@@ -179,7 +211,31 @@ public class AnalysisPipelineService {
                 }
             }
 
-            // Step 6: Generate report
+            // Step 6: Generate and execute API tests
+            if (!persistedEndpoints.isEmpty()) {
+                progress.emit(analysisId, new ProgressEvent("EXECUTING",
+                        "Running API tests for " + persistedEndpoints.size() + " endpoint(s)…", 88));
+                String authToken = extractAuthToken(crawlResult.storageStateJson());
+                for (ApiEndpoint endpoint : persistedEndpoints) {
+                    List<GeneratedTest> apiTests;
+                    try {
+                        apiTests = apiTestGenerationService.generateForEndpoint(endpoint);
+                    } catch (Exception e) {
+                        log.warn("API test generation failed for {}: {}", endpoint.getUrl(), e.getMessage());
+                        continue;
+                    }
+                    for (GeneratedTest apiTest : apiTests) {
+                        try {
+                            TestExecution execution = executionService.executeApiTest(apiTest, analysisId, authToken);
+                            bugDetectionService.detectFromExecution(execution, analysisId);
+                        } catch (Exception e) {
+                            log.warn("API test execution failed for {}: {}", apiTest.getTargetUrl(), e.getMessage());
+                        }
+                    }
+                }
+            }
+
+            // Step 7: Generate report
             progress.emit(analysisId, new ProgressEvent("REPORTING", "Generating quality report…", 92));
             try {
                 reportService.generate(analysisId, ReportFormat.JSON);
@@ -200,6 +256,26 @@ public class AnalysisPipelineService {
         } finally {
             progress.complete(analysisId);
         }
+    }
+
+    /** Extracts the QAAS access token from the Playwright storage-state JSON captured during login. */
+    private String extractAuthToken(String storageStateJson) {
+        if (storageStateJson == null || storageStateJson.isBlank()) return null;
+        try {
+            JsonNode root = objectMapper.readTree(storageStateJson);
+            for (JsonNode origin : root.path("origins")) {
+                for (JsonNode entry : origin.path("localStorage")) {
+                    if ("qaas.auth".equals(entry.path("name").asText())) {
+                        JsonNode auth = objectMapper.readTree(entry.path("value").asText());
+                        String token = auth.path("accessToken").asText(null);
+                        if (token != null && !token.isBlank()) return token;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not extract auth token from storage state: {}", e.getMessage());
+        }
+        return null;
     }
 
     private void updateStatus(UUID analysisId, String status) {

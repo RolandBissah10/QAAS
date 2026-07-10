@@ -5,7 +5,7 @@ import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
-import { analysisApi, projectApi, reportApi } from "../lib/api";
+import { analysisApi, downloadReport, projectApi, reportApi } from "../lib/api";
 import type { ReportFormat } from "../lib/types";
 import { errorMessage } from "../lib/errors";
 
@@ -66,7 +66,7 @@ export function ReportsPage() {
               disabled={!selectedProject}
             >
               <option value="">Select analysis…</option>
-              {analyses.data?.filter((a) => a.status === "COMPLETED").map((a) => (
+              {analyses.data?.content.filter((a) => a.status === "COMPLETED").map((a) => (
                 <option key={a.id} value={a.id}>{a.url}</option>
               ))}
             </select>
@@ -148,14 +148,14 @@ export function ReportsPage() {
                     </div>
                   </div>
                   {r.filePath && (
-                    <a
-                      href={reportApi.downloadUrl(r.id)}
-                      download
+                    <button
+                      type="button"
                       title="Download report"
+                      onClick={() => void downloadReport(r.id, r.format)}
                       className="inline-flex items-center justify-center rounded-md p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                     >
                       <Download className="h-4 w-4" />
-                    </a>
+                    </button>
                   )}
                 </div>
               ))}

@@ -1,6 +1,7 @@
 import axios from "axios";
 import type {
   Analysis,
+  ApiEndpoint,
   AuthResponse,
   Bug,
   DashboardSummary,
@@ -18,7 +19,10 @@ import type {
   User,
 } from "./types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8090";
+// Empty string = relative URL, routed through the Vite proxy to http://localhost:8090 in dev.
+// Set VITE_API_BASE_URL to the full backend URL for production builds.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+const AUTH_STORAGE_KEY = "qaas.auth";
 
 export const api = axios.create({ baseURL: API_BASE_URL });
 
@@ -28,6 +32,63 @@ export function setAccessToken(token: string | null) {
   } else {
     delete api.defaults.headers.common.Authorization;
   }
+}
+
+// ── Auto-refresh interceptor ─────────────────────────────────────────────────
+// When the backend returns 401, swap the expired access token for a fresh one
+// using the stored refresh token, then replay the original request.
+let _refreshing: Promise<string> | null = null;
+
+api.interceptors.response.use(
+  (res) => res,
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error)) return Promise.reject(error);
+    const original = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+    const isAuthEndpoint = original?.url?.includes("/api/auth/");
+    if (error.response?.status === 401 && original && !original._retry && !isAuthEndpoint) {
+      original._retry = true;
+      try {
+        // Deduplicate concurrent refresh calls
+        if (!_refreshing) {
+          _refreshing = (async () => {
+            const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+            if (!raw) throw new Error("No session");
+            const session = JSON.parse(raw) as AuthResponse;
+            const { data } = await axios.post<AuthResponse>(
+              `${API_BASE_URL}/api/auth/refresh`,
+              { refreshToken: session.refreshToken },
+            );
+            setAccessToken(data.accessToken);
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ ...session, accessToken: data.accessToken, refreshToken: data.refreshToken }));
+            return data.accessToken;
+          })().finally(() => { _refreshing = null; });
+        }
+        const newToken = await _refreshing;
+        if (original.headers) original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      } catch {
+        setAccessToken(null);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+// ── Report download ───────────────────────────────────────────────────────────
+// Fetches via the Axios instance (JWT header included) and triggers a blob
+// download — avoids the cross-origin <a download> restriction.
+export async function downloadReport(reportId: string, format: string): Promise<void> {
+  const response = await api.get(`/api/reports/${reportId}/download`, { responseType: "blob" });
+  const url = URL.createObjectURL(response.data as Blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `report.${format.toLowerCase()}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export const authApi = {
@@ -117,8 +178,6 @@ export const reportApi = {
     api
       .post<Report>(`/api/reports/analysis/${analysisId}`, { format })
       .then((r) => r.data),
-  downloadUrl: (reportId: string) =>
-    `${API_BASE_URL}/api/reports/${reportId}/download`,
 };
 
 export const profileApi = {
@@ -132,6 +191,11 @@ export const projectSettingsApi = {
     api.get<ProjectSettings>(`/api/projects/${projectId}/settings`).then((r) => r.data),
   save: (projectId: string, payload: Partial<ProjectSettings> & { authPassword?: string }) =>
     api.put<ProjectSettings>(`/api/projects/${projectId}/settings`, payload).then((r) => r.data),
+};
+
+export const apiEndpointApi = {
+  byAnalysis: (analysisId: string) =>
+    api.get<ApiEndpoint[]>(`/api/api-endpoints/analysis/${analysisId}`).then((r) => r.data),
 };
 
 export const uiElementApi = {

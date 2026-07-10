@@ -2,6 +2,7 @@ package com.qaas.crawler.service.impl;
 
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.qaas.crawler.dto.ApiEndpointInfo;
 import com.qaas.crawler.dto.CrawlOptions;
 import com.qaas.crawler.dto.CrawlResult;
 import com.qaas.crawler.dto.PageInfo;
@@ -42,6 +43,8 @@ public class CrawlerServiceImpl implements CrawlerService {
         Set<String> visited = new HashSet<>();
         Queue<String> queue = new ArrayDeque<>();
         List<PageInfo> results = new ArrayList<>();
+        List<ApiEndpointInfo> capturedApiEndpoints = new ArrayList<>();
+        Set<String> seenApiKeys = new HashSet<>();
         queue.add(baseUrl);
 
         URI baseUri;
@@ -49,7 +52,7 @@ public class CrawlerServiceImpl implements CrawlerService {
             baseUri = URI.create(baseUrl);
         } catch (Exception e) {
             log.warn("Invalid base URL: {}", baseUrl);
-            return new CrawlResult(results, null);
+            return new CrawlResult(results, null, List.of());
         }
 
         String storageStateJson = null;
@@ -62,6 +65,20 @@ public class CrawlerServiceImpl implements CrawlerService {
             Browser browser = pw.chromium().launch(opts);
             com.microsoft.playwright.Page page = browser.newPage();
             page.setDefaultNavigationTimeout(20000);
+
+            // Intercept all network responses to discover API endpoints
+            page.onResponse(response -> {
+                try {
+                    String rUrl = response.url();
+                    String method = response.request().method();
+                    if (isApiEndpoint(rUrl, baseUri) && !isStaticAsset(rUrl)) {
+                        String key = method + ":" + normalizeApiUrl(rUrl);
+                        if (seenApiKeys.add(key)) {
+                            capturedApiEndpoints.add(new ApiEndpointInfo(method, rUrl, response.status()));
+                        }
+                    }
+                } catch (Exception ignored) {}
+            });
 
             // Step 1: Authenticate if credentials are configured
             if (options.hasAuth()) {
@@ -154,8 +171,9 @@ public class CrawlerServiceImpl implements CrawlerService {
             log.error("Crawler failed for {}: {}", baseUrl, e.getMessage());
         }
 
-        log.info("Crawled {} pages from {}", results.size(), baseUrl);
-        return new CrawlResult(results, storageStateJson);
+        log.info("Crawled {} pages and {} API endpoints from {}",
+                results.size(), capturedApiEndpoints.size(), baseUrl);
+        return new CrawlResult(results, storageStateJson, capturedApiEndpoints);
     }
 
     // ── Sitemap extraction ────────────────────────────────────────────────────
@@ -247,6 +265,45 @@ public class CrawlerServiceImpl implements CrawlerService {
             log.info("Login completed at {}", opts.authUrl());
         } catch (Exception e) {
             log.warn("Login failed at {}: {}", opts.authUrl(), e.getMessage());
+        }
+    }
+
+    // ── API endpoint detection ────────────────────────────────────────────────
+
+    private static final Set<String> STATIC_EXTENSIONS = Set.of(
+            ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+            ".woff", ".woff2", ".ttf", ".eot", ".map", ".webp", ".avif");
+
+    private boolean isApiEndpoint(String url, URI baseUri) {
+        try {
+            URI u = URI.create(url);
+            // Must be same host as the crawled app
+            if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) return false;
+            String path = u.getPath() == null ? "" : u.getPath().toLowerCase();
+            // Treat as API if path segment starts with /api/ or common REST patterns
+            return path.startsWith("/api/") || path.startsWith("/v1/")
+                    || path.startsWith("/v2/") || path.startsWith("/graphql");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isStaticAsset(String url) {
+        String lower = url.toLowerCase();
+        int q = lower.indexOf('?');
+        String path = q >= 0 ? lower.substring(0, q) : lower;
+        return STATIC_EXTENSIONS.stream().anyMatch(path::endsWith);
+    }
+
+    /** Strip query params so GET /api/users?page=0 and ?page=1 deduplicate to /api/users. */
+    private String normalizeApiUrl(String url) {
+        try {
+            URI u = URI.create(url);
+            return u.getScheme() + "://" + u.getHost()
+                    + (u.getPort() > 0 ? ":" + u.getPort() : "")
+                    + (u.getPath() == null ? "/" : u.getPath());
+        } catch (Exception e) {
+            return url;
         }
     }
 

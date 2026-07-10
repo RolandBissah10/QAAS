@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Download, FileText } from "lucide-react";
 import { AnalysisProgress } from "../components/AnalysisProgress";
@@ -10,7 +10,9 @@ import { StatusPill } from "../components/StatusPill";
 import {
   analysisApi,
   api,
+  apiEndpointApi,
   bugApi,
+  downloadReport,
   executionApi,
   pageApi,
   reportApi,
@@ -20,6 +22,7 @@ import {
 import { errorMessage } from "../lib/errors";
 import { useAuth } from "../state/auth";
 import type {
+  ApiEndpoint,
   Bug,
   BugStatus,
   DiscoveredPage,
@@ -88,14 +91,15 @@ function ScreenshotImage({ screenshot }: { screenshot: Screenshot }) {
 
 // ── Tab types ────────────────────────────────────────────────────────────────
 
-type Tab = "pages" | "tests" | "executions" | "bugs" | "reports";
+type Tab = "pages" | "tests" | "executions" | "bugs" | "reports" | "api-endpoints";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "pages",      label: "Pages"      },
-  { key: "tests",      label: "Tests"      },
-  { key: "executions", label: "Executions" },
-  { key: "bugs",       label: "Bugs"       },
-  { key: "reports",    label: "Reports"    },
+  { key: "pages",         label: "Pages"         },
+  { key: "tests",         label: "Tests"         },
+  { key: "executions",    label: "Executions"    },
+  { key: "bugs",          label: "Bugs"          },
+  { key: "api-endpoints", label: "API Endpoints" },
+  { key: "reports",       label: "Reports"       },
 ];
 
 const FORMATS: { value: ReportFormat; label: string }[] = [
@@ -110,13 +114,30 @@ export function AnalysisDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { accessToken } = useAuth();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("pages");
-  const [tabPage, setTabPage] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [reportFormat, setReportFormat] = useState<ReportFormat>("JSON");
 
-  function handleTabChange(t: Tab) {
-    setTab(t);
-    setTabPage(0);
+  // Tab and per-tab page numbers live in the URL so a browser refresh restores position.
+  const tab         = (searchParams.get("tab") as Tab) ?? "pages";
+  const pagesPage      = parseInt(searchParams.get("pp") ?? "0", 10);
+  const testsPage      = parseInt(searchParams.get("tp") ?? "0", 10);
+  const executionsPage = parseInt(searchParams.get("ep") ?? "0", 10);
+  const bugsPage       = parseInt(searchParams.get("bp") ?? "0", 10);
+
+  function setTab(t: Tab) {
+    setSearchParams((p) => { p.set("tab", t); return p; }, { replace: true });
+  }
+  function onPagesPageChange(p: number) {
+    setSearchParams((s) => { s.set("pp", String(p)); return s; }, { replace: true });
+  }
+  function onTestsPageChange(p: number) {
+    setSearchParams((s) => { s.set("tp", String(p)); return s; }, { replace: true });
+  }
+  function onExecutionsPageChange(p: number) {
+    setSearchParams((s) => { s.set("ep", String(p)); return s; }, { replace: true });
+  }
+  function onBugsPageChange(p: number) {
+    setSearchParams((s) => { s.set("bp", String(p)); return s; }, { replace: true });
   }
 
   const analysis = useQuery({
@@ -126,23 +147,32 @@ export function AnalysisDetailPage() {
   });
 
   const pages = useQuery<PagedResponse<DiscoveredPage>>({
-    queryKey: ["pages", id, tabPage],
-    queryFn: () => pageApi.byAnalysis(id!, tabPage),
+    queryKey: ["pages", id, pagesPage],
+    queryFn: () => pageApi.byAnalysis(id!, pagesPage),
+    staleTime: 60_000,
   });
   const tests = useQuery<PagedResponse<GeneratedTest>>({
-    queryKey: ["tests", id, tabPage],
-    queryFn: () => testApi.byAnalysis(id!, tabPage),
+    queryKey: ["tests", id, testsPage],
+    queryFn: () => testApi.byAnalysis(id!, testsPage),
+    staleTime: 60_000,
   });
   const executions = useQuery<PagedResponse<TestExecution>>({
-    queryKey: ["executions", id, tabPage],
-    queryFn: () => executionApi.byAnalysis(id!, tabPage),
+    queryKey: ["executions", id, executionsPage],
+    queryFn: () => executionApi.byAnalysis(id!, executionsPage),
+    staleTime: 60_000,
   });
   const bugs = useQuery<PagedResponse<Bug>>({
-    queryKey: ["bugs", id, tabPage],
-    queryFn: () => bugApi.byAnalysis(id!, tabPage),
+    queryKey: ["bugs", id, bugsPage],
+    queryFn: () => bugApi.byAnalysis(id!, bugsPage),
+    staleTime: 60_000,
   });
-  const reports    = useQuery({ queryKey: ["reports",    id], queryFn: () => reportApi.byAnalysis(id!) });
-  const screenshots = useQuery({ queryKey: ["screenshots", id], queryFn: () => screenshotApi.byAnalysis(id!) });
+  const reports    = useQuery({ queryKey: ["reports",    id], queryFn: () => reportApi.byAnalysis(id!),        staleTime: 60_000 });
+  const screenshots = useQuery({ queryKey: ["screenshots", id], queryFn: () => screenshotApi.byAnalysis(id!), staleTime: 60_000 });
+  const apiEndpoints = useQuery<ApiEndpoint[]>({
+    queryKey: ["api-endpoints", id],
+    queryFn: () => apiEndpointApi.byAnalysis(id!),
+    staleTime: 60_000,
+  });
 
   const generateReport = useMutation({
     mutationFn: () => reportApi.generate(id!, reportFormat),
@@ -199,6 +229,7 @@ export function AnalysisDetailPage() {
                   void queryClient.invalidateQueries({ queryKey: ["bugs", id] });
                   void queryClient.invalidateQueries({ queryKey: ["reports", id] });
                   void queryClient.invalidateQueries({ queryKey: ["screenshots", id] });
+                  void queryClient.invalidateQueries({ queryKey: ["api-endpoints", id] });
                 }}
               />
             )}
@@ -230,7 +261,7 @@ export function AnalysisDetailPage() {
             <button
               key={t.key}
               type="button"
-              onClick={() => handleTabChange(t.key)}
+              onClick={() => setTab(t.key)}
               className={`shrink-0 px-5 py-3 text-sm font-medium transition-colors ${
                 tab === t.key
                   ? "border-b-2 border-brand text-brand"
@@ -242,6 +273,7 @@ export function AnalysisDetailPage() {
               {t.key === "tests"      && tests.data      ? ` (${tests.data.totalElements})`      : ""}
               {t.key === "executions" && executions.data ? ` (${executions.data.totalElements})` : ""}
               {t.key === "bugs"       && bugs.data       ? ` (${bugs.data.totalElements})`       : ""}
+              {t.key === "api-endpoints" && apiEndpoints.data ? ` (${apiEndpoints.data.length})` : ""}
               {t.key === "reports"    && reports.data    ? ` (${reports.data.length})`           : ""}
             </button>
           ))}
@@ -265,10 +297,10 @@ export function AnalysisDetailPage() {
                 ))}
               </div>
               <Pagination
-                page={tabPage}
+                page={pagesPage}
                 totalPages={pages.data.totalPages}
                 totalElements={pages.data.totalElements}
-                onPageChange={setTabPage}
+                onPageChange={onPagesPageChange}
               />
             </>
           )
@@ -295,10 +327,10 @@ export function AnalysisDetailPage() {
                 ))}
               </div>
               <Pagination
-                page={tabPage}
+                page={testsPage}
                 totalPages={tests.data.totalPages}
                 totalElements={tests.data.totalElements}
-                onPageChange={setTabPage}
+                onPageChange={onTestsPageChange}
               />
             </>
           )
@@ -328,10 +360,10 @@ export function AnalysisDetailPage() {
                 ))}
               </div>
               <Pagination
-                page={tabPage}
+                page={executionsPage}
                 totalPages={executions.data.totalPages}
                 totalElements={executions.data.totalElements}
-                onPageChange={setTabPage}
+                onPageChange={onExecutionsPageChange}
               />
               {(screenshots.data?.length ?? 0) > 0 && (
                 <div className="border-t border-line p-4">
@@ -374,12 +406,49 @@ export function AnalysisDetailPage() {
                 ))}
               </div>
               <Pagination
-                page={tabPage}
+                page={bugsPage}
                 totalPages={bugs.data.totalPages}
                 totalElements={bugs.data.totalElements}
-                onPageChange={setTabPage}
+                onPageChange={onBugsPageChange}
               />
             </>
+          )
+        )}
+
+        {/* API Endpoints tab */}
+        {tab === "api-endpoints" && (
+          apiEndpoints.isLoading ? <LoadingState /> :
+          apiEndpoints.isError   ? <ErrorState message={errorMessage(apiEndpoints.error)} /> :
+          !apiEndpoints.data?.length ? <EmptyState title="No API endpoints discovered. Run an analysis to detect endpoints." /> : (
+            <div className="divide-y divide-line">
+              {apiEndpoints.data.map((ep) => (
+                <div key={ep.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-ink">{ep.url}</div>
+                    <div className="mt-0.5 text-xs text-slate-400">
+                      Discovered {new Date(ep.discoveredAt).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {ep.observedStatus != null && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        ep.observedStatus < 300 ? "bg-emerald-100 text-emerald-700" :
+                        ep.observedStatus < 400 ? "bg-yellow-100 text-yellow-700" :
+                        "bg-red-100 text-red-700"
+                      }`}>
+                        {ep.observedStatus}
+                      </span>
+                    )}
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono font-semibold text-slate-700">
+                      {ep.method}
+                    </span>
+                    {ep.requiresAuth && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">auth</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )
         )}
 
@@ -444,14 +513,14 @@ export function AnalysisDetailPage() {
                         )}
                       </div>
                       {r.filePath && (
-                        <a
-                          href={reportApi.downloadUrl(r.id)}
-                          download
+                        <button
+                          type="button"
                           title="Download"
+                          onClick={() => void downloadReport(r.id, r.format)}
                           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                         >
                           <Download className="h-4 w-4" />
-                        </a>
+                        </button>
                       )}
                     </div>
                   ))}

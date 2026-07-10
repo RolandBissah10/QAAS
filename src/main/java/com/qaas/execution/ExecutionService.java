@@ -1,6 +1,7 @@
 package com.qaas.execution;
 
 import com.microsoft.playwright.*;
+import com.qaas.apitest.service.ApiExecutionService;
 import com.qaas.common.PagedResponse;
 import com.qaas.generator.entity.GeneratedTest;
 import com.qaas.playwright.service.PlaywrightService;
@@ -20,10 +21,13 @@ public class ExecutionService {
 
     private final TestExecutionRepository executions;
     private final PlaywrightService playwright;
+    private final ApiExecutionService apiExecutionService;
 
-    public ExecutionService(TestExecutionRepository executions, PlaywrightService playwright) {
+    public ExecutionService(TestExecutionRepository executions, PlaywrightService playwright,
+                            ApiExecutionService apiExecutionService) {
         this.executions = executions;
         this.playwright = playwright;
+        this.apiExecutionService = apiExecutionService;
     }
 
     /** Called from the analysis pipeline — reuses a shared authenticated browser context. */
@@ -61,6 +65,19 @@ public class ExecutionService {
         } catch (Exception ex) {
             log.warn("Execution error for '{}': {}", test.getName(), ex.getMessage());
             if (execution.getErrorMessage() == null) execution.fail("Browser error: " + ex.getMessage());
+        }
+        return executions.save(execution);
+    }
+
+    /** Executes an API test (api-smoke / api-auth / api-schema) via HttpClient — no browser needed. */
+    @Transactional
+    public TestExecution executeApiTest(GeneratedTest test, UUID analysisId, String authToken) {
+        TestExecution execution = executions.save(new TestExecution(test));
+        try {
+            apiExecutionService.execute(execution, test, authToken);
+        } catch (Exception ex) {
+            log.warn("API execution error for '{}': {}", test.getName(), ex.getMessage());
+            if (execution.getErrorMessage() == null) execution.fail("Request failed: " + ex.getMessage());
         }
         return executions.save(execution);
     }

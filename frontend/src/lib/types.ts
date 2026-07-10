@@ -122,6 +122,16 @@ export interface UIElement {
   label: string;
 }
 
+export interface ApiEndpoint {
+  id: string;
+  analysisId: string;
+  url: string;
+  method: string;
+  observedStatus?: number;
+  requiresAuth: boolean;
+  discoveredAt: string;
+}
+
 export interface DashboardSummary {
   applicationsAnalyzed: number;
   pagesDiscovered: number;

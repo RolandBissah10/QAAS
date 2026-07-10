@@ -14,8 +14,10 @@ public interface GeneratedTestRepository extends JpaRepository<GeneratedTest, UU
     List<GeneratedTest> findByPageId(UUID pageId);
 
     @Query(value = "SELECT t FROM GeneratedTest t WHERE t.pageId IN " +
-                   "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId = :analysisId)",
+                   "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId = :analysisId) " +
+                   "OR t.analysisId = :analysisId",
            countQuery = "SELECT COUNT(t) FROM GeneratedTest t WHERE t.pageId IN " +
-                        "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId = :analysisId)")
+                        "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId = :analysisId) " +
+                        "OR t.analysisId = :analysisId")
     Page<GeneratedTest> findByAnalysisId(@Param("analysisId") UUID analysisId, Pageable pageable);
 }
