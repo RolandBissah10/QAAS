@@ -23,11 +23,15 @@ public class ExecutionService {
     private final PlaywrightService playwright;
     private final ApiExecutionService apiExecutionService;
 
+    private final ScriptedTestExecutor scriptedTestExecutor;
+
     public ExecutionService(TestExecutionRepository executions, PlaywrightService playwright,
-                            ApiExecutionService apiExecutionService) {
+                            ApiExecutionService apiExecutionService,
+                            ScriptedTestExecutor scriptedTestExecutor) {
         this.executions = executions;
         this.playwright = playwright;
         this.apiExecutionService = apiExecutionService;
+        this.scriptedTestExecutor = scriptedTestExecutor;
     }
 
     /** Called from the analysis pipeline — reuses a shared authenticated browser context. */
@@ -85,6 +89,7 @@ public class ExecutionService {
     private String runTest(GeneratedTest test, BrowserContext context) {
         String type = test.getType() != null ? test.getType() : "smoke";
         return switch (type) {
+            case "scripted"   -> scriptedTestExecutor.execute(test.getScriptJson(), test.getTargetUrl(), context);
             case "functional" -> executeFunctional(test.getTargetUrl(), context);
             case "auth"       -> executeAuth(test.getTargetUrl(), context);
             default           -> executeSmoke(test.getTargetUrl(), context);

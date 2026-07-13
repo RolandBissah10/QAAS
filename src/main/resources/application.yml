@@ -41,6 +41,8 @@ qaas:
   mail:
     enabled: ${QAAS_MAIL_ENABLED:false}
     from: ${QAAS_MAIL_FROM:noreply@qaas.local}
+  claude:
+    api-key: ${QAAS_CLAUDE_API_KEY:}
 
 springdoc:
   swagger-ui:

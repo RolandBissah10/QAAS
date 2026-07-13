@@ -6,5 +6,5 @@ import java.util.List;
 import java.util.UUID;
 
 public interface TestGenerationService {
-    List<GeneratedTest> generateForPage(UUID pageId, String pageUrl);
+    List<GeneratedTest> generateForPage(UUID pageId, String pageUrl, String htmlContent);
 }

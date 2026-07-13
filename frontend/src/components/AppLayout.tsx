@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   BarChart3,
   Bug,
@@ -6,6 +7,7 @@ import {
   Globe2,
   LogOut,
   Moon,
+  Network,
   PlayCircle,
   ScanLine,
   Sun,
@@ -14,7 +16,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Button } from "./Button";
 import { useAuth } from "../state/auth";
 import { useTheme } from "../state/theme";
@@ -34,8 +36,9 @@ const nav: NavItem[] = [
   { to: "/pages", label: "Pages", icon: Globe2, roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/tests", label: "Tests", icon: TestTube2, roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/executions", label: "Executions", icon: PlayCircle, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/bugs", label: "Bugs", icon: Bug, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/reports", label: "Reports", icon: FileText, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/bugs",          label: "Bugs",          icon: Bug,     roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/api-endpoints", label: "API Endpoints", icon: Network, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/reports",       label: "Reports",       icon: FileText, roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/elements", label: "UI Elements", icon: ScanLine, roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/users", label: "Team", icon: Users, roles: ["OWNER"] },
 ];
@@ -44,6 +47,15 @@ export function AppLayout() {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const ThemeIcon = theme === "dark" ? Sun : Moon;
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.search) {
+      sessionStorage.setItem(`qaas.search${location.pathname}`, location.search);
+    } else {
+      sessionStorage.removeItem(`qaas.search${location.pathname}`);
+    }
+  }, [location.pathname, location.search]);
 
   const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) : [];
 
@@ -59,10 +71,11 @@ export function AppLayout() {
         <nav className="grid gap-1 p-3">
           {visibleNav.map((item) => {
             const Icon = item.icon;
+            const savedSearch = sessionStorage.getItem(`qaas.search${item.to}`) ?? "";
             return (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={`${item.to}${savedSearch}`}
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   `flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${
@@ -103,10 +116,11 @@ export function AppLayout() {
         <div className="flex overflow-x-auto">
           {visibleNav.map((item) => {
             const Icon = item.icon;
+            const savedSearch = sessionStorage.getItem(`qaas.search${item.to}`) ?? "";
             return (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={`${item.to}${savedSearch}`}
                 end={item.to === "/"}
                 className={({ isActive }) =>
                   `flex h-16 min-w-[76px] flex-col items-center justify-center gap-1 px-2 text-[11px] font-medium ${

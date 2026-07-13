@@ -141,4 +141,20 @@ export interface DashboardSummary {
   passRate: number;
   bugCount: number;
   criticalBugs: number;
+  highBugs: number;
+  mediumBugs: number;
+  lowBugs: number;
+}
+
+export interface TrendPoint {
+  analysisId: string;
+  analysisUrl: string;
+  projectId: string;
+  projectName: string;
+  date: string;
+  qualityScore: number | null;
+  passedTests: number | null;
+  failedTests: number | null;
+  bugCount: number | null;
+  pagesDiscovered: number | null;
 }

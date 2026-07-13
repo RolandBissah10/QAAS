@@ -33,6 +33,9 @@ public class GeneratedTest {
     @Column
     private String targetUrl;
 
+    @Column(name = "script_json", columnDefinition = "TEXT")
+    private String scriptJson;
+
     public GeneratedTest() { this.id = UUID.randomUUID(); }
 
     public UUID getId()              { return id; }
@@ -48,6 +51,8 @@ public class GeneratedTest {
     public void setType(String v)    { this.type = v; }
     public String getStatus()        { return status; }
     public void setStatus(String v)  { this.status = v; }
-    public String getTargetUrl()     { return targetUrl; }
-    public void setTargetUrl(String v){ this.targetUrl = v; }
+    public String getTargetUrl()       { return targetUrl; }
+    public void setTargetUrl(String v) { this.targetUrl = v; }
+    public String getScriptJson()      { return scriptJson; }
+    public void setScriptJson(String v){ this.scriptJson = v; }
 }

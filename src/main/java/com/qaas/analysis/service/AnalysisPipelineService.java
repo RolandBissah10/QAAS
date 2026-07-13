@@ -185,7 +185,7 @@ public class AnalysisPipelineService {
                                 "Generating tests for " + info.getUrl(), genProgress));
                         List<GeneratedTest> tests;
                         try {
-                            tests = testGenerationService.generateForPage(page.getId(), info.getUrl());
+                            tests = testGenerationService.generateForPage(page.getId(), info.getUrl(), info.getHtmlContent());
                         } catch (Exception e) {
                             log.warn("Test generation failed for {}: {}", info.getUrl(), e.getMessage());
                             continue;

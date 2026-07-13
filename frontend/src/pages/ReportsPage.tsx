@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileText } from "lucide-react";
 import { Button } from "../components/Button";
@@ -17,9 +17,17 @@ const FORMATS: { value: ReportFormat; label: string; available: boolean }[] = [
 
 export function ReportsPage() {
   const queryClient = useQueryClient();
-  const [selectedProject, setSelectedProject] = useState("");
-  const [selectedAnalysis, setSelectedAnalysis] = useState("");
-  const [format, setFormat] = useState<ReportFormat>("JSON");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject  = searchParams.get("project")  ?? "";
+  const selectedAnalysis = searchParams.get("analysis") ?? "";
+  const format = (searchParams.get("format") ?? "JSON") as ReportFormat;
+
+  function setSelectedAnalysis(id: string) {
+    setSearchParams({ project: selectedProject, analysis: id }, { replace: true });
+  }
+  function setFormat(f: ReportFormat) {
+    setSearchParams({ project: selectedProject, analysis: selectedAnalysis, format: f }, { replace: true });
+  }
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const analyses = useQuery({
@@ -52,7 +60,7 @@ export function ReportsPage() {
             <select
               className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               value={selectedProject}
-              onChange={(e) => { setSelectedProject(e.target.value); setSelectedAnalysis(""); }}
+              onChange={(e) => setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })}
             >
               <option value="">Select project…</option>
               {projects.data?.map((p) => (

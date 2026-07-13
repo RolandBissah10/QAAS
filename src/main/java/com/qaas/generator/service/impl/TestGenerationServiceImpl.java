@@ -4,6 +4,7 @@ import com.qaas.discovery.entity.UIElement;
 import com.qaas.discovery.repository.UIElementRepository;
 import com.qaas.generator.entity.GeneratedTest;
 import com.qaas.generator.repository.GeneratedTestRepository;
+import com.qaas.generator.service.AiTestGenerationService;
 import com.qaas.generator.service.TestGenerationService;
 import com.qaas.page.entity.Page;
 import com.qaas.page.repository.PageRepository;
@@ -19,17 +20,20 @@ public class TestGenerationServiceImpl implements TestGenerationService {
     private final GeneratedTestRepository repository;
     private final UIElementRepository uiElements;
     private final PageRepository pages;
+    private final AiTestGenerationService aiTestGenerationService;
 
     public TestGenerationServiceImpl(GeneratedTestRepository repository,
                                      UIElementRepository uiElements,
-                                     PageRepository pages) {
+                                     PageRepository pages,
+                                     AiTestGenerationService aiTestGenerationService) {
         this.repository = repository;
         this.uiElements = uiElements;
         this.pages = pages;
+        this.aiTestGenerationService = aiTestGenerationService;
     }
 
     @Override
-    public List<GeneratedTest> generateForPage(UUID pageId, String pageUrl) {
+    public List<GeneratedTest> generateForPage(UUID pageId, String pageUrl, String htmlContent) {
         Page page = pages.findById(pageId).orElse(null);
         String pageType = (page != null && page.getPageType() != null) ? page.getPageType() : "GENERAL";
         List<UIElement> elements = uiElements.findByPageId(pageId);
@@ -65,6 +69,11 @@ public class TestGenerationServiceImpl implements TestGenerationService {
                     out.add(save(pageId, pageUrl, "Functional: form on page submits without server error", "functional"));
                 out.add(save(pageId, pageUrl, "Smoke: no broken links or console errors", "smoke"));
             }
+        }
+
+        // AI-generated functional test (only when Claude is configured and page object is available)
+        if (page != null && htmlContent != null && !htmlContent.isBlank()) {
+            out.addAll(aiTestGenerationService.generateForPage(page, htmlContent));
         }
 
         return out;

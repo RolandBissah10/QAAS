@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
@@ -12,9 +12,14 @@ const selectCls =
   "rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand";
 
 export function TestsPage() {
-  const [selectedProject, setSelectedProject] = useState("");
-  const [selectedAnalysis, setSelectedAnalysis] = useState("");
-  const [page, setPage] = useState(0);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject  = searchParams.get("project")  ?? "";
+  const selectedAnalysis = searchParams.get("analysis") ?? "";
+  const page = parseInt(searchParams.get("page") ?? "0", 10);
+
+  function setPage(p: number) {
+    setSearchParams({ project: selectedProject, analysis: selectedAnalysis, page: String(p) }, { replace: true });
+  }
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const analyses = useQuery({
@@ -43,7 +48,7 @@ export function TestsPage() {
           <select
             className={selectCls}
             value={selectedProject}
-            onChange={(e) => { setSelectedProject(e.target.value); setSelectedAnalysis(""); setPage(0); }}
+            onChange={(e) => setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })}
           >
             <option value="">Select project…</option>
             {projects.data?.map((p) => (
@@ -53,7 +58,7 @@ export function TestsPage() {
           <select
             className={selectCls}
             value={selectedAnalysis}
-            onChange={(e) => { setSelectedAnalysis(e.target.value); setPage(0); }}
+            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
             disabled={!selectedProject}
           >
             <option value="">Select analysis…</option>

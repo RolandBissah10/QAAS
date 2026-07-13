@@ -15,6 +15,7 @@ import type {
   Role,
   Screenshot,
   TestExecution,
+  TrendPoint,
   UIElement,
   User,
 } from "./types";
@@ -103,6 +104,8 @@ export const authApi = {
 export const dashboardApi = {
   summary: () =>
     api.get<DashboardSummary>("/api/dashboard/summary").then((r) => r.data),
+  trends: () =>
+    api.get<TrendPoint[]>("/api/dashboard/trends").then((r) => r.data),
 };
 
 export const usersApi = {

@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface ReportRepository extends JpaRepository<Report, UUID> {
     List<Report> findByAnalysisId(UUID analysisId);
     Optional<Report> findByAnalysisIdAndFormat(UUID analysisId, ReportFormat format);
+    List<Report> findTop20ByFormatOrderByGeneratedAtDesc(ReportFormat format);
 }
