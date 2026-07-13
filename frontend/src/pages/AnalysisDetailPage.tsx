@@ -7,6 +7,7 @@ import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import {
   analysisApi,
   api,
@@ -40,6 +41,7 @@ const BUG_STATUSES: BugStatus[] = ["OPEN", "CONFIRMED", "FIXED", "WONT_FIX"];
 
 function BugStatusSelect({ bug }: { bug: Bug }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const update = useMutation({
     mutationFn: (status: BugStatus) => bugApi.updateStatus(bug.id, status),
     onSuccess: (updated) => {
@@ -50,7 +52,9 @@ function BugStatusSelect({ bug }: { bug: Bug }) {
             ? { ...old, content: old.content.map((b) => (b.id === updated.id ? { ...b, status: updated.status } : b)) }
             : old,
       );
+      toast.success(`Bug status updated to ${updated.status.replace("_", " ")}.`);
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   return (
@@ -174,9 +178,15 @@ export function AnalysisDetailPage() {
     staleTime: 60_000,
   });
 
+  const toast = useToast();
+
   const generateReport = useMutation({
     mutationFn: () => reportApi.generate(id!, reportFormat),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["reports", id] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["reports", id] });
+      toast.success(`${reportFormat} report generated successfully.`);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   // Summary stats
@@ -185,12 +195,13 @@ export function AnalysisDetailPage() {
   const qualityScore = reports.data?.find((r) => r.qualityScore != null)?.qualityScore ?? null;
 
   const a = analysis.data;
+  const backTo = `/analysis${sessionStorage.getItem("qaas.search/analysis") ?? ""}`;
 
   return (
     <div className="p-4 sm:p-6">
       {/* Back link */}
       <Link
-        to="/analysis"
+        to={backTo}
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -474,12 +485,6 @@ export function AnalysisDetailPage() {
                   </button>
                 ))}
               </div>
-              {generateReport.isError && (
-                <div className="text-sm text-red-700">{errorMessage(generateReport.error)}</div>
-              )}
-              {generateReport.isSuccess && (
-                <div className="text-sm text-emerald-700">Report generated.</div>
-              )}
               <Button
                 className="w-full"
                 loading={generateReport.isPending}

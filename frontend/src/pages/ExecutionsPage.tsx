@@ -1,10 +1,13 @@
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
+import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
-import { analysisApi, api, executionApi, projectApi, screenshotApi } from "../lib/api";
+import { useToast } from "../components/Toast";
+import { analysisApi, api, executionApi, playwrightApi, projectApi, screenshotApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 import type { PagedResponse, Screenshot, TestExecution } from "../lib/types";
 
@@ -61,6 +64,26 @@ export function ExecutionsPage() {
     enabled: !!selectedAnalysis,
   });
 
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  const rerun = useMutation({
+    mutationFn: () => playwrightApi.runTests(selectedAnalysis),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executions", selectedAnalysis] });
+      toast.success("Tests re-queued — results will appear shortly.");
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+  const runAll = useMutation({
+    mutationFn: () => playwrightApi.runAll(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["executions"] });
+      toast.success("Running tests across all analyses — results will appear shortly.");
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
   const execContent = executions.data?.content ?? [];
   const passed = execContent.filter((e) => e.status === "PASSED").length;
   const failed = execContent.filter((e) => e.status === "FAILED" || e.status === "ERROR").length;
@@ -72,7 +95,7 @@ export function ExecutionsPage() {
         description="Playwright test execution results for each generated test case."
       />
       <div className="grid gap-4 p-4 sm:p-6">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <select
             className={selectCls}
             value={selectedProject}
@@ -94,6 +117,27 @@ export function ExecutionsPage() {
               <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
             ))}
           </select>
+          {selectedAnalysis ? (
+            <Button
+              variant="secondary"
+              loading={rerun.isPending}
+              onClick={() => rerun.mutate()}
+              title="Re-run all Playwright tests for this analysis"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Re-run Tests
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              loading={runAll.isPending}
+              onClick={() => runAll.mutate()}
+              title="Run Playwright tests across all analyses"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Run All Tests
+            </Button>
+          )}
         </div>
 
         {(executions.data?.totalElements ?? 0) > 0 && (

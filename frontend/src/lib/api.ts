@@ -211,3 +211,10 @@ export const screenshotApi = {
     api.get<Screenshot[]>(`/api/screenshots/analysis/${analysisId}`).then((r) => r.data),
   imageUrl: (id: string) => `/api/screenshots/${id}/image`,
 };
+
+export const playwrightApi = {
+  runTests: (analysisId: string) =>
+    api.post<GeneratedTest[]>(`/api/playwright/run-tests/${analysisId}`).then((r) => r.data),
+  runAll: () =>
+    api.post<GeneratedTest[]>(`/api/playwright/run-tests`).then((r) => r.data),
+};

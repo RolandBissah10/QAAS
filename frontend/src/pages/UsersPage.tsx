@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import { usersApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 import { useAuth } from "../state/auth";
@@ -18,6 +20,7 @@ const selectCls =
 
 function RoleSelect({ user, currentUserId, page }: { user: User; currentUserId: string; page: number }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const update = useMutation({
     mutationFn: (role: Role) =>
@@ -26,7 +29,9 @@ function RoleSelect({ user, currentUserId, page }: { user: User; currentUserId: 
       queryClient.setQueryData<PagedResponse<User>>(["users", page], (old) =>
         old ? { ...old, content: old.content.map((u) => (u.id === updated.id ? updated : u)) } : old,
       );
+      toast.success(`${user.displayName || user.email} is now ${updated.role}.`);
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   if (user.id === currentUserId) return <StatusPill status={user.role} />;
@@ -46,7 +51,9 @@ function RoleSelect({ user, currentUserId, page }: { user: User; currentUserId: 
 export function UsersPage() {
   const queryClient = useQueryClient();
   const { user: currentUser } = useAuth();
+  const toast = useToast();
   const [page, setPage] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<User | null>(null);
 
   const users = useQuery<PagedResponse<User>>({
     queryKey: ["users", page],
@@ -55,8 +62,14 @@ export function UsersPage() {
 
   const remove = useMutation({
     mutationFn: (id: string) => usersApi.remove(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["users"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success(`${pendingDelete?.displayName || pendingDelete?.email} has been removed.`);
+      setPendingDelete(null);
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      setPendingDelete(null);
     },
   });
 
@@ -121,9 +134,9 @@ export function UsersPage() {
                         <td className="px-4 py-3 text-right">
                           <Button
                             variant="danger"
-                            disabled={isSelf || remove.isPending}
+                            disabled={isSelf}
                             title={isSelf ? "You cannot delete your own account" : "Remove user"}
-                            onClick={() => { if (!isSelf) remove.mutate(u.id); }}
+                            onClick={() => { if (!isSelf) setPendingDelete(u); }}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -142,16 +155,22 @@ export function UsersPage() {
             totalElements={users.data?.totalElements ?? 0}
             onPageChange={setPage}
           />
-
-          {remove.isError && (
-            <div className="px-4 py-2 text-sm text-red-700">{errorMessage(remove.error)}</div>
-          )}
         </div>
 
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <strong>Roles:</strong> OWNER can manage team and all settings · TESTER can run analyses · VIEWER has read-only access.
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Remove team member"
+        description={`Are you sure you want to remove ${pendingDelete?.displayName || pendingDelete?.email}? They will lose access to the platform immediately.`}
+        confirmLabel="Remove"
+        loading={remove.isPending}
+        onConfirm={() => pendingDelete && remove.mutate(pendingDelete.id)}
+        onCancel={() => setPendingDelete(null)}
+      />
     </>
   );
 }

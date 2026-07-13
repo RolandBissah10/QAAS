@@ -29,9 +29,6 @@ export function ApiEndpointsPage() {
   const selectedProject  = searchParams.get("project")  ?? "";
   const selectedAnalysis = searchParams.get("analysis") ?? "";
 
-  function setSelectedProject(id: string) {
-    setSearchParams({ project: id }, { replace: true });
-  }
   function setSelectedAnalysis(id: string) {
     setSearchParams({ project: selectedProject, analysis: id }, { replace: true });
   }
@@ -63,7 +60,7 @@ export function ApiEndpointsPage() {
           <select
             className={selectCls}
             value={selectedProject}
-            onChange={(e) => { setSelectedProject(e.target.value); setSelectedAnalysis(""); }}
+            onChange={(e) => setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })}
           >
             <option value="">Select a project…</option>
             {projects.data?.map((p) => (

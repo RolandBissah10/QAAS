@@ -4,6 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import { analysisApi, bugApi, projectApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 import type { Bug, BugStatus, PagedResponse } from "../lib/types";
@@ -15,6 +16,8 @@ const selectCls =
 
 function StatusSelect({ bugId, currentStatus }: { bugId: string; currentStatus: BugStatus }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
+
   const update = useMutation({
     mutationFn: (status: BugStatus) => bugApi.updateStatus(bugId, status),
     onSuccess: (updated) => {
@@ -25,7 +28,9 @@ function StatusSelect({ bugId, currentStatus }: { bugId: string; currentStatus: 
             ? { ...old, content: old.content.map((b) => (b.id === updated.id ? { ...b, status: updated.status } : b)) }
             : old,
       );
+      toast.success(`Bug status updated to ${updated.status.replace("_", " ")}.`);
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   return (

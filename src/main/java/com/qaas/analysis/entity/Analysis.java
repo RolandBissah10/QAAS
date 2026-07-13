@@ -14,6 +14,9 @@ public class Analysis {
     @Column(columnDefinition = "uuid")
     private UUID projectId;
 
+    @Column(columnDefinition = "uuid")
+    private UUID triggeredByUserId;
+
     @Column(nullable = false)
     private String url;
 
@@ -30,6 +33,8 @@ public class Analysis {
     public UUID getId() { return id; }
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }
+    public UUID getTriggeredByUserId() { return triggeredByUserId; }
+    public void setTriggeredByUserId(UUID triggeredByUserId) { this.triggeredByUserId = triggeredByUserId; }
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
     public String getStatus() { return status; }

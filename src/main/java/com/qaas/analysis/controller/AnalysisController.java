@@ -8,12 +8,14 @@ import com.qaas.common.PagedResponse;
 import com.qaas.exception.ConflictException;
 import com.qaas.exception.NotFoundException;
 import com.qaas.project.repository.ProjectRepository;
+import com.qaas.user.UserRepository;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -28,15 +30,18 @@ public class AnalysisController {
     private final ProjectRepository projectRepository;
     private final AnalysisPipelineService pipelineService;
     private final ProgressEmitterRegistry emitterRegistry;
+    private final UserRepository userRepository;
 
     public AnalysisController(AnalysisRepository analysisRepository,
                                ProjectRepository projectRepository,
                                AnalysisPipelineService pipelineService,
-                               ProgressEmitterRegistry emitterRegistry) {
+                               ProgressEmitterRegistry emitterRegistry,
+                               UserRepository userRepository) {
         this.analysisRepository = analysisRepository;
         this.projectRepository = projectRepository;
         this.pipelineService = pipelineService;
         this.emitterRegistry = emitterRegistry;
+        this.userRepository = userRepository;
     }
 
     public record StartRequest(@NotBlank String url) {}
@@ -51,7 +56,7 @@ public class AnalysisController {
 
     @PostMapping("/start")
     @ResponseStatus(HttpStatus.ACCEPTED)
-    public AnalysisResponse start(@RequestParam UUID projectId, @RequestBody StartRequest req) {
+    public AnalysisResponse start(@RequestParam UUID projectId, @RequestBody StartRequest req, Authentication auth) {
         projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
 
@@ -64,6 +69,10 @@ public class AnalysisController {
         analysis.setUrl(req.url());
         analysis.setStatus("RUNNING");
         analysis.setStartedAt(OffsetDateTime.now());
+        if (auth != null) {
+            userRepository.findByEmail(auth.getName())
+                    .ifPresent(u -> analysis.setTriggeredByUserId(u.getId()));
+        }
         analysisRepository.save(analysis);
 
         pipelineService.run(analysis.getId(), req.url());

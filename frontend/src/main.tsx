@@ -7,6 +7,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { AuthProvider } from "./state/auth";
 import { ThemeProvider } from "./state/theme";
+import { ToastProvider } from "./components/Toast";
 import "./index.css";
 
 const CACHE_KEY     = "qaas.query-cache";
@@ -59,9 +60,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     >
       <BrowserRouter>
         <ThemeProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          </ToastProvider>
         </ThemeProvider>
       </BrowserRouter>
     </PersistQueryClientProvider>

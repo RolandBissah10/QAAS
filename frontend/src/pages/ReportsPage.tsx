@@ -5,18 +5,20 @@ import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import { analysisApi, downloadReport, projectApi, reportApi } from "../lib/api";
 import type { ReportFormat } from "../lib/types";
 import { errorMessage } from "../lib/errors";
 
-const FORMATS: { value: ReportFormat; label: string; available: boolean }[] = [
-  { value: "JSON", label: "JSON", available: true },
-  { value: "HTML", label: "HTML", available: true },
-  { value: "PDF",  label: "PDF",  available: true },
+const FORMATS: { value: ReportFormat; label: string }[] = [
+  { value: "JSON", label: "JSON" },
+  { value: "HTML", label: "HTML" },
+  { value: "PDF",  label: "PDF"  },
 ];
 
 export function ReportsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedProject  = searchParams.get("project")  ?? "";
   const selectedAnalysis = searchParams.get("analysis") ?? "";
@@ -43,8 +45,11 @@ export function ReportsPage() {
 
   const generate = useMutation({
     mutationFn: () => reportApi.generate(selectedAnalysis, format),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: ["reports", selectedAnalysis] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["reports", selectedAnalysis] });
+      toast.success(`${format} report generated successfully.`);
+    },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   return (
@@ -83,15 +88,11 @@ export function ReportsPage() {
                 <button
                   key={f.value}
                   type="button"
-                  disabled={!f.available}
-                  onClick={() => f.available && setFormat(f.value)}
-                  title={f.available ? undefined : "Coming soon"}
+                  onClick={() => setFormat(f.value)}
                   className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-                    format === f.value && f.available
+                    format === f.value
                       ? "border-brand bg-teal-50 text-brand"
-                      : f.available
-                      ? "border-line text-slate-600 hover:bg-slate-50"
-                      : "cursor-not-allowed border-line text-slate-300"
+                      : "border-line text-slate-600 hover:bg-slate-50"
                   }`}
                 >
                   {f.label}
@@ -99,9 +100,6 @@ export function ReportsPage() {
               ))}
             </div>
           </div>
-          {generate.isError && (
-            <div className="text-sm text-red-700">{errorMessage(generate.error)}</div>
-          )}
           <Button
             className="w-full"
             loading={generate.isPending}

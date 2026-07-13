@@ -15,6 +15,10 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.UUID;
+
 @Service
 public class EmailNotificationService {
 
@@ -45,28 +49,43 @@ public class EmailNotificationService {
             log.debug("Mail disabled — skipping notification for analysis {}", event.analysisId());
             return;
         }
-        String toEmail = resolveOwnerEmail(event);
-        if (toEmail == null) {
-            log.warn("Could not resolve owner email for analysis {} — notification skipped", event.analysisId());
+
+        Set<String> recipients = new LinkedHashSet<>();
+
+        // Always notify the project owner
+        UUID projectId = event.projectId();
+        if (projectId != null) {
+            projectRepository.findById(projectId)
+                    .filter(project -> project.getOwnerId() != null)
+                    .flatMap(project -> userRepository.findById(project.getOwnerId()))
+                    .map(user -> user.getEmail())
+                    .ifPresent(recipients::add);
+        }
+
+        // Also notify whoever triggered the analysis (if different from owner)
+        UUID triggeredBy = event.triggeredByUserId();
+        if (triggeredBy != null) {
+            userRepository.findById(triggeredBy)
+                    .map(user -> user.getEmail())
+                    .ifPresent(recipients::add);
+        }
+
+        if (recipients.isEmpty()) {
+            log.warn("No recipients resolved for analysis {} — notification skipped", event.analysisId());
             return;
         }
 
-        try {
-            if ("COMPLETED".equals(event.status())) {
-                sendCompleted(toEmail, event);
-            } else if ("FAILED".equals(event.status())) {
-                sendFailed(toEmail, event);
+        for (String email : recipients) {
+            try {
+                if ("COMPLETED".equals(event.status())) {
+                    sendCompleted(email, event);
+                } else if ("FAILED".equals(event.status())) {
+                    sendFailed(email, event);
+                }
+            } catch (Exception e) {
+                log.error("Failed to send email to {} for analysis {}: {}", email, event.analysisId(), e.getMessage());
             }
-        } catch (Exception e) {
-            log.error("Failed to send email notification for analysis {}: {}", event.analysisId(), e.getMessage());
         }
-    }
-
-    private String resolveOwnerEmail(AnalysisNotificationEvent event) {
-        return projectRepository.findById(event.projectId())
-                .flatMap(project -> userRepository.findById(project.getOwnerId()))
-                .map(user -> user.getEmail())
-                .orElse(null);
     }
 
     private void sendCompleted(String to, AnalysisNotificationEvent event) throws Exception {

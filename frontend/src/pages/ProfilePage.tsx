@@ -5,14 +5,15 @@ import { Button } from "../components/Button";
 import { Field, TextInput } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import { profileApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 import { useAuth } from "../state/auth";
 
 export function ProfilePage() {
   const { user, updateUser } = useAuth();
+  const toast = useToast();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [saved, setSaved] = useState(false);
 
   const profile = useQuery({
     queryKey: ["profile"],
@@ -30,9 +31,9 @@ export function ProfilePage() {
     mutationFn: () => profileApi.update(displayName),
     onSuccess: (updated) => {
       updateUser(updated);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast.success("Profile updated.");
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   function submit(e: FormEvent) {
@@ -51,7 +52,6 @@ export function ProfilePage() {
     <>
       <PageHeader title="Profile" description="Manage your account details." />
       <div className="mx-auto max-w-lg p-4 sm:p-6">
-        {/* Avatar + identity */}
         <div className="mb-6 flex items-center gap-4 rounded-md border border-line bg-white p-5">
           <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-teal-100 text-xl font-bold text-brand">
             {initials || <User className="h-7 w-7" />}
@@ -72,7 +72,6 @@ export function ProfilePage() {
           </div>
         </div>
 
-        {/* Edit form */}
         <form
           className="grid gap-4 rounded-md border border-line bg-white p-5"
           onSubmit={submit}
@@ -87,10 +86,7 @@ export function ProfilePage() {
             <TextInput
               placeholder="Your name"
               value={displayName}
-              onChange={(e) => {
-                setDisplayName(e.target.value);
-                setSaved(false);
-              }}
+              onChange={(e) => setDisplayName(e.target.value)}
               maxLength={120}
             />
           </Field>
@@ -98,13 +94,6 @@ export function ProfilePage() {
           <Field label="Role">
             <TextInput value={user?.role ?? ""} disabled readOnly />
           </Field>
-
-          {update.isError && (
-            <div className="text-sm text-red-700">{errorMessage(update.error)}</div>
-          )}
-          {saved && (
-            <div className="text-sm text-emerald-700">Profile updated.</div>
-          )}
 
           <Button
             type="submit"

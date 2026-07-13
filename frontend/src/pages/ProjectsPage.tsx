@@ -1,15 +1,18 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronUp, Plus, Settings, Trash2 } from "lucide-react";
 import { Button } from "../components/Button";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
 import { Field, TextArea, TextInput } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
+import { useToast } from "../components/Toast";
 import { projectApi, projectSettingsApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 
 function ProjectSettingsPanel({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const settings = useQuery({
     queryKey: ["project-settings", projectId],
@@ -23,13 +26,15 @@ function ProjectSettingsPanel({ projectId }: { projectId: string }) {
   const [excludedPatterns, setExcludedPatterns] = useState("");
   const [initialised, setInitialised] = useState(false);
 
-  if (settings.data && !initialised) {
-    setMaxPages(settings.data.maxPages ?? 20);
-    setAuthUrl(settings.data.authUrl ?? "");
-    setAuthUsername(settings.data.authUsername ?? "");
-    setExcludedPatterns(settings.data.excludedPatterns ?? "");
-    setInitialised(true);
-  }
+  useEffect(() => {
+    if (settings.data && !initialised) {
+      setMaxPages(settings.data.maxPages ?? 20);
+      setAuthUrl(settings.data.authUrl ?? "");
+      setAuthUsername(settings.data.authUsername ?? "");
+      setExcludedPatterns(settings.data.excludedPatterns ?? "");
+      setInitialised(true);
+    }
+  }, [settings.data, initialised]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -43,7 +48,9 @@ function ProjectSettingsPanel({ projectId }: { projectId: string }) {
     onSuccess: () => {
       setAuthPassword("");
       queryClient.invalidateQueries({ queryKey: ["project-settings", projectId] });
+      toast.success("Settings saved.");
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   if (settings.isLoading) return <div className="px-3 py-2 text-xs text-slate-400">Loading settings…</div>;
@@ -66,9 +73,9 @@ function ProjectSettingsPanel({ projectId }: { projectId: string }) {
             onChange={(e) => setMaxPages(e.target.value === "" ? "" : Number(e.target.value))}
           />
         </Field>
-        <Field label="Excluded URL patterns">
-          <TextInput
-            placeholder="/logout, /admin, /api"
+        <Field label="Excluded URL patterns (comma-separated)">
+          <TextArea
+            placeholder="/logout, /admin, /api/internal"
             value={excludedPatterns}
             onChange={(e) => setExcludedPatterns(e.target.value)}
           />
@@ -113,13 +120,6 @@ function ProjectSettingsPanel({ projectId }: { projectId: string }) {
         </Field>
       </div>
 
-      {save.isError && (
-        <div className="text-sm text-red-700">{errorMessage(save.error)}</div>
-      )}
-      {save.isSuccess && (
-        <div className="text-sm text-emerald-700">Settings saved.</div>
-      )}
-
       <div>
         <Button type="submit" loading={save.isPending}>
           Save settings
@@ -131,23 +131,35 @@ function ProjectSettingsPanel({ projectId }: { projectId: string }) {
 
 export function ProjectsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [openSettings, setOpenSettings] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
   const save = useMutation({
     mutationFn: projectApi.create,
-    onSuccess: async () => {
+    onSuccess: async (project) => {
       setName("");
       setDescription("");
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(`Project "${project.name}" created.`);
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   const remove = useMutation({
     mutationFn: projectApi.remove,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success(`Project "${pendingDelete?.name}" deleted.`);
+      setPendingDelete(null);
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      setPendingDelete(null);
+    },
   });
 
   function submit(event: FormEvent) {
@@ -204,7 +216,7 @@ export function ProjectsPage() {
                   </button>
                   <Button
                     variant="danger"
-                    onClick={() => remove.mutate(project.id)}
+                    onClick={() => setPendingDelete({ id: project.id, name: project.name })}
                     title="Delete project"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -218,6 +230,16 @@ export function ProjectsPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete project"
+        description={`Are you sure you want to delete "${pendingDelete?.name}"? This will permanently remove all associated analyses, tests, bugs, and reports.`}
+        confirmLabel="Delete"
+        loading={remove.isPending}
+        onConfirm={() => pendingDelete && remove.mutate(pendingDelete.id)}
+        onCancel={() => setPendingDelete(null)}
+      />
     </>
   );
 }

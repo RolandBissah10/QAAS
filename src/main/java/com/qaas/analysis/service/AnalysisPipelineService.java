@@ -95,9 +95,9 @@ public class AnalysisPipelineService {
     @Async
     public void run(UUID analysisId, String baseUrl) {
         log.info("Pipeline starting for analysis {} url={}", analysisId, baseUrl);
-        UUID projectId = analysisRepository.findById(analysisId)
-                .map(Analysis::getProjectId)
-                .orElse(null);
+        Analysis meta = analysisRepository.findById(analysisId).orElse(null);
+        UUID projectId          = meta != null ? meta.getProjectId()          : null;
+        UUID triggeredByUserId  = meta != null ? meta.getTriggeredByUserId()  : null;
         try {
             // Load per-project crawl settings
             CrawlOptions crawlOptions = (projectId == null) ? CrawlOptions.defaults()
@@ -121,7 +121,7 @@ public class AnalysisPipelineService {
                 progress.emit(analysisId, new ProgressEvent("FAILED", "No pages could be reached at " + baseUrl, 0));
                 updateStatus(analysisId, "FAILED");
                 progress.complete(analysisId);
-                if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, baseUrl, "FAILED"));
+                if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
                 return;
             }
 
@@ -246,13 +246,13 @@ public class AnalysisPipelineService {
             progress.emit(analysisId, new ProgressEvent("COMPLETED", "Analysis complete", 100));
             log.info("Pipeline COMPLETED for analysis {}", analysisId);
             updateStatus(analysisId, "COMPLETED");
-            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, baseUrl, "COMPLETED"));
+            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "COMPLETED"));
 
         } catch (Exception e) {
             log.error("Pipeline FAILED for analysis {} url={}", analysisId, baseUrl, e);
             progress.emit(analysisId, new ProgressEvent("FAILED", "Pipeline error: " + e.getMessage(), 0));
             updateStatus(analysisId, "FAILED");
-            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, baseUrl, "FAILED"));
+            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
         } finally {
             progress.complete(analysisId);
         }

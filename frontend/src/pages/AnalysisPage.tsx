@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Play, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -9,6 +10,7 @@ import { Field, TextInput } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
+import { useToast } from "../components/Toast";
 import { analysisApi, projectApi } from "../lib/api";
 import { useAuth } from "../state/auth";
 import { errorMessage } from "../lib/errors";
@@ -16,9 +18,17 @@ import { errorMessage } from "../lib/errors";
 export function AnalysisPage() {
   const queryClient = useQueryClient();
   const { accessToken } = useAuth();
-  const [selectedProject, setSelectedProject] = useState("");
+  const toast = useToast();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject = searchParams.get("project") ?? "";
+  const page = parseInt(searchParams.get("page") ?? "0", 10);
+
   const [url, setUrl] = useState("");
-  const [page, setPage] = useState(0);
+
+  function setPage(p: number) {
+    setSearchParams({ project: selectedProject, page: String(p) }, { replace: true });
+  }
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const analyses = useQuery({
@@ -36,7 +46,9 @@ export function AnalysisPage() {
     onSuccess: async () => {
       setUrl("");
       await queryClient.invalidateQueries({ queryKey: ["analyses", selectedProject] });
+      toast.info("Analysis started — the pipeline is running in the background.");
     },
+    onError: (err) => toast.error(errorMessage(err)),
   });
 
   function submit(e: FormEvent) {
@@ -59,7 +71,7 @@ export function AnalysisPage() {
             <select
               className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
+              onChange={(e) => setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })}
               required
             >
               <option value="">Select a project…</option>
@@ -79,9 +91,6 @@ export function AnalysisPage() {
               required
             />
           </Field>
-          {start.isError ? (
-            <div className="text-sm text-red-700">{errorMessage(start.error)}</div>
-          ) : null}
           <Button className="w-full" loading={start.isPending} type="submit">
             <Play className="h-4 w-4" />
             Start Analysis
