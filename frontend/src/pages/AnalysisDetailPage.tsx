@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Download, FileText } from "lucide-react";
+import { ArrowLeft, Download, FileText, StopCircle } from "lucide-react";
 import { AnalysisProgress } from "../components/AnalysisProgress";
 import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
@@ -180,6 +180,15 @@ export function AnalysisDetailPage() {
 
   const toast = useToast();
 
+  const stopAnalysis = useMutation({
+    mutationFn: () => analysisApi.stop(id!),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["analysis", id] });
+      toast.success("Analysis stopped successfully.");
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
   const generateReport = useMutation({
     mutationFn: () => reportApi.generate(id!, reportFormat),
     onSuccess: async () => {
@@ -225,7 +234,21 @@ export function AnalysisDetailPage() {
                 </div>
                 <div className="mt-0.5 font-mono text-xs text-slate-400">{a.id}</div>
               </div>
-              <StatusPill status={a.status} />
+              <div className="flex shrink-0 items-center gap-2">
+                <StatusPill status={a.status} />
+                {a.status === "RUNNING" && (
+                  <button
+                    type="button"
+                    title="Stop analysis"
+                    disabled={stopAnalysis.isPending}
+                    onClick={() => stopAnalysis.mutate()}
+                    className="flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                    Stop
+                  </button>
+                )}
+              </div>
             </div>
 
             {a.status === "RUNNING" && accessToken && (

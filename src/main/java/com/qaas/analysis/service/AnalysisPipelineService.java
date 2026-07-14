@@ -6,6 +6,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
+import com.qaas.analysis.AnalysisCancellationRegistry;
 import com.qaas.analysis.ProgressEmitterRegistry;
 import com.qaas.analysis.dto.ProgressEvent;
 import com.qaas.analysis.entity.Analysis;
@@ -32,7 +33,9 @@ import com.qaas.report.ReportFormat;
 import com.qaas.report.ReportService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +44,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+
+
 
 @Service
 public class AnalysisPipelineService {
@@ -61,6 +66,7 @@ public class AnalysisPipelineService {
     private final ApiEndpointRepository apiEndpointRepository;
     private final ApiTestGenerationService apiTestGenerationService;
     private final ObjectMapper objectMapper;
+    private final AnalysisCancellationRegistry cancellationRegistry;
 
     public AnalysisPipelineService(AnalysisRepository analysisRepository,
                                    CrawlerService crawlerService,
@@ -75,7 +81,8 @@ public class AnalysisPipelineService {
                                    ApplicationEventPublisher eventPublisher,
                                    ApiEndpointRepository apiEndpointRepository,
                                    ApiTestGenerationService apiTestGenerationService,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   AnalysisCancellationRegistry cancellationRegistry) {
         this.analysisRepository = analysisRepository;
         this.crawlerService = crawlerService;
         this.pageRepository = pageRepository;
@@ -90,16 +97,24 @@ public class AnalysisPipelineService {
         this.apiEndpointRepository = apiEndpointRepository;
         this.apiTestGenerationService = apiTestGenerationService;
         this.objectMapper = objectMapper;
+        this.cancellationRegistry = cancellationRegistry;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void resetOrphanedAnalyses() {
+        int fixed = analysisRepository.failAllRunning(OffsetDateTime.now());
+        if (fixed > 0) log.warn("Reset {} orphaned RUNNING analysis/analyses to FAILED on startup", fixed);
     }
 
     @Async
     public void run(UUID analysisId, String baseUrl) {
         log.info("Pipeline starting for analysis {} url={}", analysisId, baseUrl);
+
         Analysis meta = analysisRepository.findById(analysisId).orElse(null);
-        UUID projectId          = meta != null ? meta.getProjectId()          : null;
-        UUID triggeredByUserId  = meta != null ? meta.getTriggeredByUserId()  : null;
+        UUID projectId         = meta != null ? meta.getProjectId()         : null;
+        UUID triggeredByUserId = meta != null ? meta.getTriggeredByUserId() : null;
+
         try {
-            // Load per-project crawl settings
             CrawlOptions crawlOptions = (projectId == null) ? CrawlOptions.defaults()
                     : projectSettingsRepository.findByProjectId(projectId)
                             .map(s -> new CrawlOptions(
@@ -110,9 +125,17 @@ public class AnalysisPipelineService {
                                     parsePatterns(s.getExcludedPatterns())))
                             .orElse(CrawlOptions.defaults());
 
-            // Step 1: Crawl
+            // Step 1: Crawl — pass cancel checker so BFS exits early if stop is requested
             progress.emit(analysisId, new ProgressEvent("CRAWLING", "Crawling " + baseUrl + "…", 5));
-            CrawlResult crawlResult = crawlerService.crawl(baseUrl, crawlOptions);
+            CrawlResult crawlResult = crawlerService.crawl(
+                    baseUrl, crawlOptions, () -> cancellationRegistry.isCancelled(analysisId));
+
+            // Check immediately after the crawl returns
+            if (cancellationRegistry.isCancelled(analysisId)) {
+                handleCancellation(analysisId, baseUrl);
+                return;
+            }
+
             List<PageInfo> crawled = crawlResult.pages();
             log.info("Crawled {} pages for analysis {}", crawled.size(), analysisId);
 
@@ -121,7 +144,8 @@ public class AnalysisPipelineService {
                 progress.emit(analysisId, new ProgressEvent("FAILED", "No pages could be reached at " + baseUrl, 0));
                 updateStatus(analysisId, "FAILED");
                 progress.complete(analysisId);
-                if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
+                if (projectId != null) eventPublisher.publishEvent(
+                        new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
                 return;
             }
 
@@ -144,9 +168,7 @@ public class AnalysisPipelineService {
                     + (persistedEndpoints.isEmpty() ? "" : " and " + persistedEndpoints.size() + " API endpoint(s)"),
                     20));
 
-            // Steps 2–5: one shared browser context for all test executions.
-            // If the crawler authenticated, inject the captured storage state so tests
-            // run as the authenticated user rather than as an anonymous visitor.
+            // Steps 2–5: one shared browser context for all test executions
             try (Playwright pw = Playwright.create()) {
                 Browser browser = pw.chromium().launch(new BrowserType.LaunchOptions()
                         .setHeadless(true)
@@ -159,6 +181,12 @@ public class AnalysisPipelineService {
                 try {
                     int total = crawled.size();
                     for (int i = 0; i < total; i++) {
+                        // Check before each page — exit cleanly without processing further pages
+                        if (cancellationRegistry.isCancelled(analysisId)) {
+                            log.info("Pipeline cancelled at page {}/{} for analysis {}", i, total, analysisId);
+                            break;
+                        }
+
                         PageInfo info = crawled.get(i);
 
                         // Step 2: Persist discovered page
@@ -197,6 +225,7 @@ public class AnalysisPipelineService {
                                 "Running " + tests.size() + " test" + (tests.size() == 1 ? "" : "s") +
                                 " on " + info.getUrl(), execProgress));
                         for (GeneratedTest test : tests) {
+                            if (cancellationRegistry.isCancelled(analysisId)) break;
                             try {
                                 TestExecution execution = executionService.execute(test, analysisId, sharedContext);
                                 bugDetectionService.detectFromExecution(execution, analysisId);
@@ -211,12 +240,19 @@ public class AnalysisPipelineService {
                 }
             }
 
+            // Check again before API tests
+            if (cancellationRegistry.isCancelled(analysisId)) {
+                handleCancellation(analysisId, baseUrl);
+                return;
+            }
+
             // Step 6: Generate and execute API tests
             if (!persistedEndpoints.isEmpty()) {
                 progress.emit(analysisId, new ProgressEvent("EXECUTING",
                         "Running API tests for " + persistedEndpoints.size() + " endpoint(s)…", 88));
                 String authToken = extractAuthToken(crawlResult.storageStateJson());
                 for (ApiEndpoint endpoint : persistedEndpoints) {
+                    if (cancellationRegistry.isCancelled(analysisId)) break;
                     List<GeneratedTest> apiTests;
                     try {
                         apiTests = apiTestGenerationService.generateForEndpoint(endpoint);
@@ -225,6 +261,7 @@ public class AnalysisPipelineService {
                         continue;
                     }
                     for (GeneratedTest apiTest : apiTests) {
+                        if (cancellationRegistry.isCancelled(analysisId)) break;
                         try {
                             TestExecution execution = executionService.executeApiTest(apiTest, analysisId, authToken);
                             bugDetectionService.detectFromExecution(execution, analysisId);
@@ -233,6 +270,12 @@ public class AnalysisPipelineService {
                         }
                     }
                 }
+            }
+
+            // Final cancellation check before report generation
+            if (cancellationRegistry.isCancelled(analysisId)) {
+                handleCancellation(analysisId, baseUrl);
+                return;
             }
 
             // Step 7: Generate report
@@ -246,19 +289,27 @@ public class AnalysisPipelineService {
             progress.emit(analysisId, new ProgressEvent("COMPLETED", "Analysis complete", 100));
             log.info("Pipeline COMPLETED for analysis {}", analysisId);
             updateStatus(analysisId, "COMPLETED");
-            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "COMPLETED"));
+            if (projectId != null) eventPublisher.publishEvent(
+                    new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "COMPLETED"));
 
         } catch (Exception e) {
             log.error("Pipeline FAILED for analysis {} url={}", analysisId, baseUrl, e);
             progress.emit(analysisId, new ProgressEvent("FAILED", "Pipeline error: " + e.getMessage(), 0));
             updateStatus(analysisId, "FAILED");
-            if (projectId != null) eventPublisher.publishEvent(new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
+            if (projectId != null) eventPublisher.publishEvent(
+                    new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "FAILED"));
         } finally {
+            cancellationRegistry.deregister(analysisId);
             progress.complete(analysisId);
         }
     }
 
-    /** Extracts the QAAS access token from the Playwright storage-state JSON captured during login. */
+    private void handleCancellation(UUID analysisId, String baseUrl) {
+        log.info("Pipeline CANCELLED for analysis {} url={}", analysisId, baseUrl);
+        progress.emit(analysisId, new ProgressEvent("CANCELLED", "Analysis stopped by user", 0));
+        updateStatus(analysisId, "CANCELLED");
+    }
+
     private String extractAuthToken(String storageStateJson) {
         if (storageStateJson == null || storageStateJson.isBlank()) return null;
         try {
@@ -280,6 +331,9 @@ public class AnalysisPipelineService {
 
     private void updateStatus(UUID analysisId, String status) {
         analysisRepository.findById(analysisId).ifPresent(a -> {
+            // Never overwrite CANCELLED with COMPLETED/FAILED — stop endpoint may have
+            // already written CANCELLED (e.g. for zombie analyses), and we must not undo it.
+            if ("CANCELLED".equals(a.getStatus()) && !"CANCELLED".equals(status)) return;
             a.setStatus(status);
             a.setCompletedAt(OffsetDateTime.now());
             analysisRepository.save(a);

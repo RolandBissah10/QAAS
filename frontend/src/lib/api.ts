@@ -138,6 +138,8 @@ export const analysisApi = {
     api
       .get<PagedResponse<Analysis>>(`/api/analysis/project/${projectId}`, { params: { page, size } })
       .then((r) => r.data),
+  stop: (id: string) =>
+    api.post<void>(`/api/analysis/${id}/stop`).then((r) => r.data),
   progressUrl: (id: string, token: string) =>
     `${API_BASE_URL}/api/analysis/${id}/progress?token=${encodeURIComponent(token)}`,
 };

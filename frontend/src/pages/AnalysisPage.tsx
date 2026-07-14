@@ -1,7 +1,7 @@
 import { FormEvent, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Play, RefreshCw } from "lucide-react";
+import { ArrowRight, Play, RefreshCw, StopCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AnalysisProgress } from "../components/AnalysisProgress";
 import { Button } from "../components/Button";
@@ -47,6 +47,15 @@ export function AnalysisPage() {
       setUrl("");
       await queryClient.invalidateQueries({ queryKey: ["analyses", selectedProject] });
       toast.info("Analysis started — the pipeline is running in the background.");
+    },
+    onError: (err) => toast.error(errorMessage(err)),
+  });
+
+  const stop = useMutation({
+    mutationFn: (id: string) => analysisApi.stop(id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["analyses", selectedProject] });
+      toast.success("Analysis stopped successfully.");
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
@@ -138,6 +147,17 @@ export function AnalysisPage() {
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <StatusPill status={a.status} />
+                        {a.status === "RUNNING" && (
+                          <button
+                            type="button"
+                            title="Stop analysis"
+                            disabled={stop.isPending}
+                            onClick={() => stop.mutate(a.id)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-red-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+                          >
+                            <StopCircle className="h-4 w-4" />
+                          </button>
+                        )}
                         <Link
                           to={`/analysis/${a.id}`}
                           title="View details"

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URI;
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,7 +28,6 @@ public class CrawlerServiceImpl implements CrawlerService {
              .filter(h => h && h.length > 0)
         """;
 
-    /** Common application routes to probe when link-following doesn't find them. */
     private static final List<String> COMMON_PATHS = List.of(
         "/dashboard", "/home", "/profile", "/settings", "/account",
         "/admin", "/analytics", "/reports", "/users", "/products",
@@ -39,7 +39,7 @@ public class CrawlerServiceImpl implements CrawlerService {
     private static final Pattern SITEMAP_LOC = Pattern.compile("<loc>([^<]+)</loc>", Pattern.CASE_INSENSITIVE);
 
     @Override
-    public CrawlResult crawl(String baseUrl, CrawlOptions options) {
+    public CrawlResult crawl(String baseUrl, CrawlOptions options, Supplier<Boolean> cancelChecker) {
         Set<String> visited = new HashSet<>();
         Queue<String> queue = new ArrayDeque<>();
         List<PageInfo> results = new ArrayList<>();
@@ -66,12 +66,11 @@ public class CrawlerServiceImpl implements CrawlerService {
             com.microsoft.playwright.Page page = browser.newPage();
             page.setDefaultNavigationTimeout(20000);
 
-            // Intercept all network responses to discover API endpoints
             page.onResponse(response -> {
                 try {
                     String rUrl = response.url();
                     String method = response.request().method();
-                    if (isApiEndpoint(rUrl, baseUri) && !isStaticAsset(rUrl)) {
+                    if (isApiEndpoint(rUrl, response, baseUri)) {
                         String key = method + ":" + normalizeApiUrl(rUrl);
                         if (seenApiKeys.add(key)) {
                             capturedApiEndpoints.add(new ApiEndpointInfo(method, rUrl, response.status()));
@@ -80,7 +79,6 @@ public class CrawlerServiceImpl implements CrawlerService {
                 } catch (Exception ignored) {}
             });
 
-            // Step 1: Authenticate if credentials are configured
             if (options.hasAuth()) {
                 doLogin(page, options);
                 try {
@@ -90,22 +88,25 @@ public class CrawlerServiceImpl implements CrawlerService {
                 }
             }
 
-            // Step 2: Seed the queue from sitemap.xml — covers routes not linked from any page
             List<String> sitemapUrls = extractFromSitemap(page, baseUri);
             sitemapUrls.stream()
                     .filter(u -> !visited.contains(u) && !isExcluded(u, options.excludedPatterns()))
                     .forEach(queue::add);
             if (!sitemapUrls.isEmpty()) {
                 log.info("Seeded {} URLs from sitemap.xml", sitemapUrls.size());
-                // Navigate back so the BFS loop starts from a clean state
                 try {
                     page.navigate(baseUrl, new com.microsoft.playwright.Page.NavigateOptions()
                             .setWaitUntil(WaitUntilState.LOAD).setTimeout(15000));
                 } catch (Exception ignored) {}
             }
 
-            // Step 3: BFS link-following crawl
+            // BFS crawl — exits early if cancellation is requested
             while (!queue.isEmpty() && results.size() < options.maxPages()) {
+                if (Boolean.TRUE.equals(cancelChecker.get())) {
+                    log.info("Crawl cancelled — stopping BFS at {} pages visited", results.size());
+                    break;
+                }
+
                 String url = queue.poll();
                 if (visited.contains(url)) continue;
                 if (isExcluded(url, options.excludedPatterns())) continue;
@@ -117,9 +118,13 @@ public class CrawlerServiceImpl implements CrawlerService {
                                     .setWaitUntil(WaitUntilState.LOAD));
                     if (response == null || response.status() >= 400) continue;
 
-                    // If the app redirected us to a login page, this route is auth-protected
-                    // and we have no session — skip it rather than recording the login page.
                     String finalUrl = page.url();
+
+                    if (!sameHost(finalUrl, baseUri)) {
+                        log.debug("Skipping {} — redirected off-domain to {}", url, finalUrl);
+                        continue;
+                    }
+
                     if (isAuthRedirect(url, finalUrl)) {
                         log.debug("Skipping {} — redirected to auth page ({})", url, finalUrl);
                         visited.add(finalUrl);
@@ -127,7 +132,6 @@ public class CrawlerServiceImpl implements CrawlerService {
                     }
                     visited.add(finalUrl);
 
-                    // Extra settling time for SPAs that hydrate asynchronously after load
                     try { page.waitForTimeout(1500); } catch (Exception ignored) {}
 
                     String title = page.title();
@@ -143,7 +147,6 @@ public class CrawlerServiceImpl implements CrawlerService {
                             URI u = URI.create(href);
                             if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) continue;
 
-                            // Preserve hash fragments for hash-based SPA routing (e.g. /#/dashboard)
                             String fragment = (u.getFragment() != null && !u.getFragment().isBlank())
                                     ? "#" + u.getFragment() : "";
                             String path = (u.getPath() == null || u.getPath().isBlank()) ? "/" : u.getPath();
@@ -161,10 +164,10 @@ public class CrawlerServiceImpl implements CrawlerService {
                 }
             }
 
-            // Step 4: Probe common paths not yet discovered via link-following or sitemap.
-            // This catches routes that are only reachable by direct navigation (dashboards,
-            // settings pages, admin panels) and not linked from any crawled page.
-            probeCommonPaths(page, baseUri, visited, results, options);
+            // Only probe common paths if not cancelled
+            if (!Boolean.TRUE.equals(cancelChecker.get())) {
+                probeCommonPaths(page, baseUri, visited, results, options, cancelChecker);
+            }
 
             browser.close();
         } catch (Exception e) {
@@ -207,12 +210,15 @@ public class CrawlerServiceImpl implements CrawlerService {
     // ── Common path probing ───────────────────────────────────────────────────
 
     private void probeCommonPaths(com.microsoft.playwright.Page page, URI baseUri,
-                                   Set<String> visited, List<PageInfo> results, CrawlOptions options) {
+                                   Set<String> visited, List<PageInfo> results,
+                                   CrawlOptions options, Supplier<Boolean> cancelChecker) {
         String base = baseUri.getScheme() + "://" + baseUri.getHost()
                 + (baseUri.getPort() > 0 ? ":" + baseUri.getPort() : "");
 
         for (String path : COMMON_PATHS) {
             if (results.size() >= options.maxPages()) break;
+            if (Boolean.TRUE.equals(cancelChecker.get())) break;
+
             String url = base + path;
             if (visited.contains(url) || isExcluded(url, options.excludedPatterns())) continue;
             visited.add(url);
@@ -223,6 +229,12 @@ public class CrawlerServiceImpl implements CrawlerService {
                 if (response == null || response.status() >= 400) continue;
 
                 String finalUrl = page.url();
+
+                if (!sameHost(finalUrl, baseUri)) {
+                    log.debug("Common path {} redirected off-domain to {} — skipping", url, finalUrl);
+                    continue;
+                }
+
                 if (isAuthRedirect(url, finalUrl)) {
                     visited.add(finalUrl);
                     continue;
@@ -272,17 +284,33 @@ public class CrawlerServiceImpl implements CrawlerService {
 
     private static final Set<String> STATIC_EXTENSIONS = Set.of(
             ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-            ".woff", ".woff2", ".ttf", ".eot", ".map", ".webp", ".avif");
+            ".woff", ".woff2", ".ttf", ".eot", ".map", ".webp", ".avif",
+            ".pdf", ".zip", ".mp4", ".mp3");
 
-    private boolean isApiEndpoint(String url, URI baseUri) {
+    private boolean isApiEndpoint(String url, Response response, URI baseUri) {
         try {
             URI u = URI.create(url);
-            // Must be same host as the crawled app
             if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) return false;
+            if (isStaticAsset(url)) return false;
+
+            try {
+                Map<String, String> headers = response.headers();
+                if (headers != null) {
+                    String ct = headers.getOrDefault("content-type", "");
+                    if (ct.contains("application/json")
+                            || ct.contains("application/xml")
+                            || ct.contains("text/xml")
+                            || ct.contains("application/graphql")) {
+                        return true;
+                    }
+                }
+            } catch (Exception ignored) {}
+
             String path = u.getPath() == null ? "" : u.getPath().toLowerCase();
-            // Treat as API if path segment starts with /api/ or common REST patterns
             return path.startsWith("/api/") || path.startsWith("/v1/")
-                    || path.startsWith("/v2/") || path.startsWith("/graphql");
+                    || path.startsWith("/v2/") || path.startsWith("/v3/")
+                    || path.startsWith("/rest/") || path.startsWith("/graphql")
+                    || path.startsWith("/query") || path.startsWith("/gql");
         } catch (Exception e) {
             return false;
         }
@@ -295,7 +323,6 @@ public class CrawlerServiceImpl implements CrawlerService {
         return STATIC_EXTENSIONS.stream().anyMatch(path::endsWith);
     }
 
-    /** Strip query params so GET /api/users?page=0 and ?page=1 deduplicate to /api/users. */
     private String normalizeApiUrl(String url) {
         try {
             URI u = URI.create(url);
@@ -309,7 +336,14 @@ public class CrawlerServiceImpl implements CrawlerService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /** Returns true when a navigation redirected away from the requested URL to an auth page. */
+    private boolean sameHost(String url, URI baseUri) {
+        try {
+            return baseUri.getHost().equalsIgnoreCase(URI.create(url).getHost());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private boolean isAuthRedirect(String requestedUrl, String finalUrl) {
         if (finalUrl == null || finalUrl.equals(requestedUrl)) return false;
         String lower = finalUrl.toLowerCase();

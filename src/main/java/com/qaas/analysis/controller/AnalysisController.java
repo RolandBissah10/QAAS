@@ -1,5 +1,6 @@
 package com.qaas.analysis.controller;
 
+import com.qaas.analysis.AnalysisCancellationRegistry;
 import com.qaas.analysis.ProgressEmitterRegistry;
 import com.qaas.analysis.entity.Analysis;
 import com.qaas.analysis.repository.AnalysisRepository;
@@ -31,17 +32,20 @@ public class AnalysisController {
     private final AnalysisPipelineService pipelineService;
     private final ProgressEmitterRegistry emitterRegistry;
     private final UserRepository userRepository;
+    private final AnalysisCancellationRegistry cancellationRegistry;
 
     public AnalysisController(AnalysisRepository analysisRepository,
                                ProjectRepository projectRepository,
                                AnalysisPipelineService pipelineService,
                                ProgressEmitterRegistry emitterRegistry,
-                               UserRepository userRepository) {
+                               UserRepository userRepository,
+                               AnalysisCancellationRegistry cancellationRegistry) {
         this.analysisRepository = analysisRepository;
         this.projectRepository = projectRepository;
         this.pipelineService = pipelineService;
         this.emitterRegistry = emitterRegistry;
         this.userRepository = userRepository;
+        this.cancellationRegistry = cancellationRegistry;
     }
 
     public record StartRequest(@NotBlank String url) {}
@@ -75,6 +79,9 @@ public class AnalysisController {
         }
         analysisRepository.save(analysis);
 
+        // Register BEFORE dispatching so any stop() call that arrives before the
+        // background thread starts still finds a flag to flip.
+        cancellationRegistry.register(analysis.getId());
         pipelineService.run(analysis.getId(), req.url());
 
         return AnalysisResponse.from(analysis);
@@ -98,6 +105,19 @@ public class AnalysisController {
     @GetMapping(value = "/{id}/progress", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter progress(@PathVariable UUID id) {
         return emitterRegistry.subscribe(id);
+    }
+
+    @PostMapping("/{id}/stop")
+    public ResponseEntity<Void> stop(@PathVariable UUID id) {
+        if (!analysisRepository.existsById(id)) return ResponseEntity.notFound().build();
+        // Signal the live pipeline thread (no-op if thread is already gone)
+        cancellationRegistry.cancel(id);
+        // Atomic UPDATE — only fires if status is currently RUNNING; returns 0 for
+        // zombie analyses whose status is already terminal.
+        int updated = analysisRepository.cancelIfRunning(id, OffsetDateTime.now());
+        return updated > 0
+                ? ResponseEntity.accepted().build()
+                : ResponseEntity.noContent().build();
     }
 
     @GetMapping("/project/{projectId}")

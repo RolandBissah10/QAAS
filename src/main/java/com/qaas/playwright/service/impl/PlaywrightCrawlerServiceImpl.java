@@ -19,6 +19,6 @@ public class PlaywrightCrawlerServiceImpl implements PlaywrightCrawlerService {
 
     @Override
     public List<PageInfo> crawl(String baseUrl, int maxPages) throws Exception {
-        return crawlerService.crawl(baseUrl, new CrawlOptions(maxPages, null, null, null, List.of())).pages();
+        return crawlerService.crawl(baseUrl, new CrawlOptions(maxPages, null, null, null, List.of()), () -> false).pages();
     }
 }
