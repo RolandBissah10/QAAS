@@ -8,7 +8,9 @@ import com.qaas.analysis.service.AnalysisPipelineService;
 import com.qaas.common.PagedResponse;
 import com.qaas.exception.ConflictException;
 import com.qaas.exception.NotFoundException;
+import com.qaas.project.entity.Project;
 import com.qaas.project.repository.ProjectRepository;
+import com.qaas.user.User;
 import com.qaas.user.UserRepository;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.data.domain.PageRequest;
@@ -61,8 +63,10 @@ public class AnalysisController {
     @PostMapping("/start")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public AnalysisResponse start(@RequestParam UUID projectId, @RequestBody StartRequest req, Authentication auth) {
-        projectRepository.findById(projectId)
+        Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new NotFoundException("Project not found"));
+
+        requireProjectOwner(project, auth);
 
         if (analysisRepository.existsByProjectIdAndUrlAndStatus(projectId, req.url(), "RUNNING")) {
             throw new ConflictException("An analysis is already running for this URL in this project");
@@ -73,14 +77,10 @@ public class AnalysisController {
         analysis.setUrl(req.url());
         analysis.setStatus("RUNNING");
         analysis.setStartedAt(OffsetDateTime.now());
-        if (auth != null) {
-            userRepository.findByEmail(auth.getName())
-                    .ifPresent(u -> analysis.setTriggeredByUserId(u.getId()));
-        }
+        userRepository.findByEmail(auth.getName())
+                .ifPresent(u -> analysis.setTriggeredByUserId(u.getId()));
         analysisRepository.save(analysis);
 
-        // Register BEFORE dispatching so any stop() call that arrives before the
-        // background thread starts still finds a flag to flip.
         cancellationRegistry.register(analysis.getId());
         pipelineService.run(analysis.getId(), req.url());
 
@@ -88,16 +88,18 @@ public class AnalysisController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AnalysisResponse> get(@PathVariable UUID id) {
+    public ResponseEntity<AnalysisResponse> get(@PathVariable UUID id, Authentication auth) {
         return analysisRepository.findById(id)
+                .filter(a -> isOwner(a, auth))
                 .map(AnalysisResponse::from)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/status/{id}")
-    public ResponseEntity<String> status(@PathVariable UUID id) {
+    public ResponseEntity<String> status(@PathVariable UUID id, Authentication auth) {
         return analysisRepository.findById(id)
+                .filter(a -> isOwner(a, auth))
                 .map(a -> ResponseEntity.ok(a.getStatus()))
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -108,12 +110,10 @@ public class AnalysisController {
     }
 
     @PostMapping("/{id}/stop")
-    public ResponseEntity<Void> stop(@PathVariable UUID id) {
-        if (!analysisRepository.existsById(id)) return ResponseEntity.notFound().build();
-        // Signal the live pipeline thread (no-op if thread is already gone)
+    public ResponseEntity<Void> stop(@PathVariable UUID id, Authentication auth) {
+        Analysis analysis = analysisRepository.findById(id).orElse(null);
+        if (analysis == null || !isOwner(analysis, auth)) return ResponseEntity.notFound().build();
         cancellationRegistry.cancel(id);
-        // Atomic UPDATE — only fires if status is currently RUNNING; returns 0 for
-        // zombie analyses whose status is already terminal.
         int updated = analysisRepository.cancelIfRunning(id, OffsetDateTime.now());
         return updated > 0
                 ? ResponseEntity.accepted().build()
@@ -124,10 +124,32 @@ public class AnalysisController {
     public PagedResponse<AnalysisResponse> byProject(
             @PathVariable UUID projectId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication auth) {
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new NotFoundException("Project not found"));
+        requireProjectOwner(project, auth);
         var paged = analysisRepository.findByProjectId(projectId,
                 PageRequest.of(page, size, Sort.by("startedAt").descending()));
         return PagedResponse.fromMapped(paged, paged.getContent().stream()
                 .map(AnalysisResponse::from).toList());
+    }
+
+    // Returns true if the authenticated user owns the project that this analysis belongs to
+    private boolean isOwner(Analysis analysis, Authentication auth) {
+        if (analysis.getProjectId() == null) return true;
+        User user = userRepository.findByEmail(auth.getName()).orElse(null);
+        if (user == null) return false;
+        return projectRepository.findById(analysis.getProjectId())
+                .map(p -> user.getId().equals(p.getOwnerId()))
+                .orElse(false);
+    }
+
+    private void requireProjectOwner(Project project, Authentication auth) {
+        User user = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new NotFoundException("User not found"));
+        if (!user.getId().equals(project.getOwnerId())) {
+            throw new NotFoundException("Project not found");
+        }
     }
 }

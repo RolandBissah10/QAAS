@@ -10,12 +10,14 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
 public interface AnalysisRepository extends JpaRepository<Analysis, UUID> {
     List<Analysis> findByProjectId(UUID projectId);
     Page<Analysis> findByProjectId(UUID projectId, Pageable pageable);
+    List<Analysis> findByProjectIdIn(Collection<UUID> projectIds);
     boolean existsByProjectIdAndUrlAndStatus(UUID projectId, String url, String status);
     List<Analysis> findByStatus(String status);
 

@@ -3,3 +3,4 @@ target/
 .vscode/
 *.iml
 *.log
+src/main/resources/application-local.yml

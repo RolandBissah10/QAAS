@@ -118,9 +118,9 @@ export const usersApi = {
 
 export const projectApi = {
   list: () => api.get<Project[]>("/api/projects").then((r) => r.data),
-  create: (payload: { name: string; description?: string }) =>
+  create: (payload: { name: string; description?: string; baseUrl?: string }) =>
     api.post<Project>("/api/projects", payload).then((r) => r.data),
-  update: (id: string, payload: { name: string; description?: string }) =>
+  update: (id: string, payload: { name: string; description?: string; baseUrl?: string }) =>
     api.put<Project>(`/api/projects/${id}`, payload).then((r) => r.data),
   remove: (id: string) => api.delete<void>(`/api/projects/${id}`),
 };

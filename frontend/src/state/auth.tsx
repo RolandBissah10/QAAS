@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useState } from "react";
 import { authApi, setAccessToken } from "../lib/api";
+import { queryClient, CACHE_KEY } from "../lib/queryClient";
 import type { AuthResponse, User } from "../lib/types";
 
 interface AuthState {
@@ -33,12 +34,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       accessToken: session?.accessToken ?? null,
       refreshToken: session?.refreshToken ?? null,
       login: async (email, password) => {
+        // Wipe any previous user's cached data before loading new session
+        queryClient.clear();
+        localStorage.removeItem(CACHE_KEY);
         const result = await authApi.login({ email, password });
         setAccessToken(result.accessToken);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
         setSession(result);
       },
       register: async (email, password) => {
+        queryClient.clear();
+        localStorage.removeItem(CACHE_KEY);
         const result = await authApi.register({ email, password });
         setAccessToken(result.accessToken);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
@@ -49,8 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await authApi.logout(session.refreshToken).catch(() => undefined);
         }
         setAccessToken(null);
+        // Clear in-memory cache first so the persister has nothing left to write back
+        queryClient.clear();
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(CACHE_KEY);
         setSession(null);
+        window.location.replace("/login");
       },
       updateUser: (user: User) => {
         setSession((prev) => {

@@ -1,5 +1,6 @@
 package com.qaas.user;
 
+import com.qaas.auth.repository.RefreshTokenRepository;
 import com.qaas.common.PagedResponse;
 import com.qaas.exception.BadRequestException;
 import com.qaas.exception.NotFoundException;
@@ -14,10 +15,12 @@ import java.util.UUID;
 @Service
 public class UserService {
     private final UserRepository users;
+    private final RefreshTokenRepository refreshTokens;
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
-    public UserService(UserRepository users) {
+    public UserService(UserRepository users, RefreshTokenRepository refreshTokens) {
         this.users = users;
+        this.refreshTokens = refreshTokens;
     }
 
     @Transactional(readOnly = true)
@@ -59,6 +62,7 @@ public class UserService {
         if (user.getEmail().equals(editorEmail)) {
             throw new BadRequestException("Owners cannot delete their own account");
         }
+        refreshTokens.deleteByUser(user);
         users.delete(user);
     }
 }

@@ -12,6 +12,7 @@ import com.qaas.project.repository.ProjectRepository;
 import com.qaas.report.Report;
 import com.qaas.report.ReportFormat;
 import com.qaas.report.ReportRepository;
+import com.qaas.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,32 +33,40 @@ public class DashboardService {
     private final BugRepository bugs;
     private final ReportRepository reports;
     private final ProjectRepository projects;
+    private final UserRepository users;
 
     public DashboardService(AnalysisRepository analyses, PageRepository pages,
                             TestExecutionRepository executions, BugRepository bugs,
-                            ReportRepository reports, ProjectRepository projects) {
+                            ReportRepository reports, ProjectRepository projects,
+                            UserRepository users) {
         this.analyses = analyses;
         this.pages = pages;
         this.executions = executions;
         this.bugs = bugs;
         this.reports = reports;
         this.projects = projects;
+        this.users = users;
     }
 
     @Transactional(readOnly = true)
-    public DashboardDtos.SummaryResponse summary() {
-        long appCount     = analyses.count();
-        long pageCount    = pages.count();
-        long passed       = executions.countByStatus(ExecutionStatus.PASSED);
-        long failed       = executions.countByStatus(ExecutionStatus.FAILED)
-                           + executions.countByStatus(ExecutionStatus.ERROR);
-        long total        = passed + failed;
-        double passRate   = total == 0 ? 0.0 : (passed * 100.0) / total;
-        long bugCount     = bugs.count();
-        long critical     = bugs.countBySeverity(Severity.CRITICAL);
-        long high         = bugs.countBySeverity(Severity.HIGH);
-        long medium       = bugs.countBySeverity(Severity.MEDIUM);
-        long low          = bugs.countBySeverity(Severity.LOW);
+    public DashboardDtos.SummaryResponse summary(String userEmail) {
+        List<UUID> analysisIds = resolveAnalysisIds(userEmail);
+        if (analysisIds.isEmpty()) {
+            return new DashboardDtos.SummaryResponse(0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0);
+        }
+
+        long appCount   = analysisIds.size();
+        long pageCount  = pages.countByAnalysisIdIn(analysisIds);
+        long passed     = executions.countByStatusAndAnalysisIds(ExecutionStatus.PASSED, analysisIds);
+        long failed     = executions.countByStatusAndAnalysisIds(ExecutionStatus.FAILED, analysisIds)
+                        + executions.countByStatusAndAnalysisIds(ExecutionStatus.ERROR, analysisIds);
+        long total      = passed + failed;
+        double passRate = total == 0 ? 0.0 : (passed * 100.0) / total;
+        long bugCount   = bugs.countByAnalysisIdIn(analysisIds);
+        long critical   = bugs.countBySeverityAndAnalysisIdIn(Severity.CRITICAL, analysisIds);
+        long high       = bugs.countBySeverityAndAnalysisIdIn(Severity.HIGH, analysisIds);
+        long medium     = bugs.countBySeverityAndAnalysisIdIn(Severity.MEDIUM, analysisIds);
+        long low        = bugs.countBySeverityAndAnalysisIdIn(Severity.LOW, analysisIds);
 
         return new DashboardDtos.SummaryResponse(
                 appCount, pageCount, total, passed, failed,
@@ -66,13 +75,17 @@ public class DashboardService {
     }
 
     @Transactional(readOnly = true)
-    public List<DashboardDtos.TrendPoint> trends() {
-        List<Report> recent = reports.findTop20ByFormatOrderByGeneratedAtDesc(ReportFormat.JSON);
+    public List<DashboardDtos.TrendPoint> trends(String userEmail) {
+        List<UUID> analysisIds = resolveAnalysisIds(userEmail);
+        if (analysisIds.isEmpty()) return List.of();
+
+        List<Report> recent = reports.findTop20ByFormatAndAnalysisIdInOrderByGeneratedAtDesc(
+                ReportFormat.JSON, analysisIds);
         if (recent.isEmpty()) return List.of();
 
         // Batch-load analyses and projects to avoid N+1
-        Set<UUID> analysisIds = recent.stream().map(Report::getAnalysisId).collect(Collectors.toSet());
-        Map<UUID, Analysis> analysisMap = analyses.findAllById(analysisIds)
+        Set<UUID> reportAnalysisIds = recent.stream().map(Report::getAnalysisId).collect(Collectors.toSet());
+        Map<UUID, Analysis> analysisMap = analyses.findAllById(reportAnalysisIds)
                 .stream().collect(Collectors.toMap(Analysis::getId, a -> a));
 
         Set<UUID> projectIds = analysisMap.values().stream()
@@ -99,8 +112,19 @@ public class DashboardService {
                     r.getPagesDiscovered()
             ));
         }
-        // Return chronological order (oldest first) so charts render left→right
         Collections.reverse(result);
         return result;
+    }
+
+    private List<UUID> resolveAnalysisIds(String userEmail) {
+        return users.findByEmail(userEmail)
+                .map(user -> {
+                    List<UUID> projectIds = projects.findByOwnerId(user.getId()).stream()
+                            .map(Project::getId).toList();
+                    if (projectIds.isEmpty()) return List.<UUID>of();
+                    return analyses.findByProjectIdIn(projectIds).stream()
+                            .map(Analysis::getId).toList();
+                })
+                .orElse(List.of());
     }
 }

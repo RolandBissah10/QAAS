@@ -1,5 +1,6 @@
 package com.qaas.dashboard;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,12 +17,12 @@ public class DashboardController {
     }
 
     @GetMapping("/summary")
-    DashboardDtos.SummaryResponse summary() {
-        return service.summary();
+    DashboardDtos.SummaryResponse summary(Authentication auth) {
+        return service.summary(auth.getName());
     }
 
     @GetMapping("/trends")
-    List<DashboardDtos.TrendPoint> trends() {
-        return service.trends();
+    List<DashboardDtos.TrendPoint> trends(Authentication auth) {
+        return service.trends(auth.getName());
     }
 }

@@ -49,36 +49,34 @@ public class ProjectService {
         Project p = new Project();
         p.setName(request.name());
         p.setDescription(request.description());
+        p.setBaseUrl(request.baseUrl());
         p.setOwnerId(owner.getId());
         return ProjectResponse.from(projects.save(p));
     }
 
     @Transactional(readOnly = true)
-    public List<ProjectResponse> list() {
-        return projects.findAll().stream().map(ProjectResponse::from).toList();
+    public List<ProjectResponse> list(String ownerEmail) {
+        User owner = users.currentUser(ownerEmail);
+        return projects.findByOwnerId(owner.getId()).stream().map(ProjectResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public Project get(UUID id) {
-        return projects.findById(id).orElseThrow(() -> new NotFoundException("Project not found"));
-    }
-
-    @Transactional(readOnly = true)
-    public ProjectResponse find(UUID id) {
-        return ProjectResponse.from(get(id));
+    public ProjectResponse find(UUID id, String ownerEmail) {
+        return ProjectResponse.from(getOwned(id, ownerEmail));
     }
 
     @Transactional
-    public ProjectResponse update(UUID id, ProjectRequest request) {
-        Project project = get(id);
+    public ProjectResponse update(UUID id, String ownerEmail, ProjectRequest request) {
+        Project project = getOwned(id, ownerEmail);
         project.setName(request.name());
         project.setDescription(request.description());
+        project.setBaseUrl(request.baseUrl());
         return ProjectResponse.from(project);
     }
 
     @Transactional
-    public void delete(UUID id) {
-        Project project = get(id);
+    public void delete(UUID id, String ownerEmail) {
+        Project project = getOwned(id, ownerEmail);
         analyses.findByProjectId(id).forEach(analysis -> {
             UUID analysisId = analysis.getId();
             bugs.deleteAll(bugs.findByAnalysisId(analysisId));
@@ -91,5 +89,27 @@ public class ProjectService {
         });
         analyses.deleteAll(analyses.findByProjectId(id));
         projects.delete(project);
+    }
+
+    // Used internally by AnalysisController to verify project ownership
+    public Project getOwned(UUID id, String ownerEmail) {
+        User owner = users.currentUser(ownerEmail);
+        Project project = projects.findById(id)
+                .orElseThrow(() -> new NotFoundException("Project not found"));
+        if (!owner.getId().equals(project.getOwnerId())) {
+            throw new NotFoundException("Project not found");
+        }
+        return project;
+    }
+
+    // Throws NotFoundException if the authenticated user does not own the project
+    // that contains this analysis. Used by all sub-entity controllers.
+    @Transactional(readOnly = true)
+    public void verifyAnalysisAccess(UUID analysisId, String ownerEmail) {
+        var analysis = analyses.findById(analysisId)
+                .orElseThrow(() -> new NotFoundException("Not found"));
+        if (analysis.getProjectId() != null) {
+            getOwned(analysis.getProjectId(), ownerEmail);
+        }
     }
 }

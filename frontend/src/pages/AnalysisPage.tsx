@@ -80,7 +80,12 @@ export function AnalysisPage() {
             <select
               className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
               value={selectedProject}
-              onChange={(e) => setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })}
+              onChange={(e) => {
+                const projectId = e.target.value;
+                setSearchParams(projectId ? { project: projectId } : {}, { replace: true });
+                const picked = projects.data?.find((p) => p.id === projectId);
+                if (picked?.baseUrl) setUrl(picked.baseUrl);
+              }}
               required
             >
               <option value="">Select a project…</option>

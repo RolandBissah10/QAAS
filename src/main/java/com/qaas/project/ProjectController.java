@@ -29,28 +29,28 @@ public class ProjectController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    ProjectResponse create(Authentication authentication, @Valid @RequestBody ProjectRequest request) {
-        return service.create(authentication.getName(), request);
+    ProjectResponse create(Authentication auth, @Valid @RequestBody ProjectRequest request) {
+        return service.create(auth.getName(), request);
     }
 
     @GetMapping
-    List<ProjectResponse> list() {
-        return service.list();
+    List<ProjectResponse> list(Authentication auth) {
+        return service.list(auth.getName());
     }
 
     @GetMapping("/{id}")
-    ProjectResponse get(@PathVariable UUID id) {
-        return service.find(id);
+    ProjectResponse get(@PathVariable UUID id, Authentication auth) {
+        return service.find(id, auth.getName());
     }
 
     @PutMapping("/{id}")
-    ProjectResponse update(@PathVariable UUID id, @Valid @RequestBody ProjectRequest request) {
-        return service.update(id, request);
+    ProjectResponse update(@PathVariable UUID id, Authentication auth, @Valid @RequestBody ProjectRequest request) {
+        return service.update(id, auth.getName(), request);
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void delete(@PathVariable UUID id) {
-        service.delete(id);
+    void delete(@PathVariable UUID id, Authentication auth) {
+        service.delete(id, auth.getName());
     }
 }

@@ -1,9 +1,11 @@
 package com.qaas.report;
 
 import com.qaas.exception.NotFoundException;
+import com.qaas.project.ProjectService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Files;
@@ -17,29 +19,35 @@ public class ReportController {
 
     private final ReportService service;
     private final ReportRepository repository;
+    private final ProjectService projectService;
 
-    public ReportController(ReportService service, ReportRepository repository) {
+    public ReportController(ReportService service, ReportRepository repository, ProjectService projectService) {
         this.service = service;
         this.repository = repository;
+        this.projectService = projectService;
     }
 
     @PostMapping("/analysis/{analysisId}")
     @ResponseStatus(HttpStatus.CREATED)
     ReportDtos.ReportResponse generate(
             @PathVariable UUID analysisId,
-            @RequestBody ReportDtos.GenerateReportRequest request) {
+            @RequestBody ReportDtos.GenerateReportRequest request,
+            Authentication auth) {
+        projectService.verifyAnalysisAccess(analysisId, auth.getName());
         return ReportDtos.ReportResponse.from(service.generate(analysisId, request.format()));
     }
 
     @GetMapping("/analysis/{analysisId}")
-    List<ReportDtos.ReportResponse> byAnalysis(@PathVariable UUID analysisId) {
+    List<ReportDtos.ReportResponse> byAnalysis(@PathVariable UUID analysisId, Authentication auth) {
+        projectService.verifyAnalysisAccess(analysisId, auth.getName());
         return service.getByAnalysis(analysisId);
     }
 
     @GetMapping("/{id}/download")
-    ResponseEntity<byte[]> download(@PathVariable UUID id) {
+    ResponseEntity<byte[]> download(@PathVariable UUID id, Authentication auth) {
         Report report = repository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Report not found"));
+        projectService.verifyAnalysisAccess(report.getAnalysisId(), auth.getName());
 
         if (report.getFilePath() == null) {
             throw new NotFoundException("Report file has not been generated yet");

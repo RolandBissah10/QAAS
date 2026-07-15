@@ -132,7 +132,7 @@ public class AnalysisPipelineService {
 
             // Check immediately after the crawl returns
             if (cancellationRegistry.isCancelled(analysisId)) {
-                handleCancellation(analysisId, baseUrl);
+                handleCancellation(analysisId, baseUrl, projectId, triggeredByUserId);
                 return;
             }
 
@@ -242,7 +242,7 @@ public class AnalysisPipelineService {
 
             // Check again before API tests
             if (cancellationRegistry.isCancelled(analysisId)) {
-                handleCancellation(analysisId, baseUrl);
+                handleCancellation(analysisId, baseUrl, projectId, triggeredByUserId);
                 return;
             }
 
@@ -274,7 +274,7 @@ public class AnalysisPipelineService {
 
             // Final cancellation check before report generation
             if (cancellationRegistry.isCancelled(analysisId)) {
-                handleCancellation(analysisId, baseUrl);
+                handleCancellation(analysisId, baseUrl, projectId, triggeredByUserId);
                 return;
             }
 
@@ -304,10 +304,12 @@ public class AnalysisPipelineService {
         }
     }
 
-    private void handleCancellation(UUID analysisId, String baseUrl) {
+    private void handleCancellation(UUID analysisId, String baseUrl, UUID projectId, UUID triggeredByUserId) {
         log.info("Pipeline CANCELLED for analysis {} url={}", analysisId, baseUrl);
         progress.emit(analysisId, new ProgressEvent("CANCELLED", "Analysis stopped by user", 0));
         updateStatus(analysisId, "CANCELLED");
+        if (projectId != null) eventPublisher.publishEvent(
+                new AnalysisNotificationEvent(analysisId, projectId, triggeredByUserId, baseUrl, "CANCELLED"));
     }
 
     private String extractAuthToken(String storageStateJson) {

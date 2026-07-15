@@ -135,6 +135,7 @@ export function ProjectsPage() {
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
   const [openSettings, setOpenSettings] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
 
@@ -143,6 +144,7 @@ export function ProjectsPage() {
     onSuccess: async (project) => {
       setName("");
       setDescription("");
+      setBaseUrl("");
       await queryClient.invalidateQueries({ queryKey: ["projects"] });
       toast.success(`Project "${project.name}" created.`);
     },
@@ -164,7 +166,7 @@ export function ProjectsPage() {
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    save.mutate({ name, description });
+    save.mutate({ name, description, baseUrl: baseUrl || undefined });
   }
 
   return (
@@ -177,6 +179,14 @@ export function ProjectsPage() {
           </Field>
           <Field label="Description">
             <TextArea value={description} onChange={(e) => setDescription(e.target.value)} />
+          </Field>
+          <Field label="Application URL (optional)">
+            <TextInput
+              type="url"
+              placeholder="https://myapp.com"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
           </Field>
           {save.isError ? <div className="text-sm text-red-700">{errorMessage(save.error)}</div> : null}
           <Button className="w-full sm:w-fit" loading={save.isPending} type="submit">

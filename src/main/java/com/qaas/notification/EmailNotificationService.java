@@ -81,6 +81,8 @@ public class EmailNotificationService {
                     sendCompleted(email, event);
                 } else if ("FAILED".equals(event.status())) {
                     sendFailed(email, event);
+                } else if ("CANCELLED".equals(event.status())) {
+                    sendCancelled(email, event);
                 }
             } catch (Exception e) {
                 log.error("Failed to send email to {} for analysis {}: {}", email, event.analysisId(), e.getMessage());
@@ -117,6 +119,19 @@ public class EmailNotificationService {
 
         send(to, subject, body);
         log.info("Sent COMPLETED notification to {} for analysis {}", to, event.analysisId());
+    }
+
+    private void sendCancelled(String to, AnalysisNotificationEvent event) throws Exception {
+        String subject = "QAAS — Analysis stopped for " + event.url();
+        String body = buildHtml(
+                "Analysis Stopped",
+                "#f59e0b",
+                event.url(),
+                "<p>The analysis was stopped before it could complete.</p>"
+                + "<p style='color:#64748b;font-size:14px'>Log in to the QAAS dashboard to start a new analysis.</p>"
+        );
+        send(to, subject, body);
+        log.info("Sent CANCELLED notification to {} for analysis {}", to, event.analysisId());
     }
 
     private void sendFailed(String to, AnalysisNotificationEvent event) throws Exception {
