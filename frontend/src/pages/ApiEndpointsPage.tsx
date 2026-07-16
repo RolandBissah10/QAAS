@@ -77,24 +77,11 @@ export function ApiEndpointsPage() {
             ))}
           </select>
 
-          <select
-            className={selectCls}
-            value={selectedAnalysis}
-            onChange={(e) => setSelectedAnalysis(e.target.value)}
-            disabled={!selectedProject}
-          >
-            <option value="">Select an analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.url} — {new Date(a.startedAt).toLocaleDateString()}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* Content */}
         {!selectedAnalysis ? (
-          <EmptyState title="Select a project and analysis to view discovered API endpoints." />
+          <EmptyState title="Select a project to view discovered API endpoints." />
         ) : endpoints.isLoading ? (
           <LoadingState />
         ) : endpoints.isError ? (

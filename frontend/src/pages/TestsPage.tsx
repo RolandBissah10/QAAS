@@ -63,17 +63,6 @@ export function TestsPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <select
-            className={selectCls}
-            value={selectedAnalysis}
-            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
-            disabled={!selectedProject}
-          >
-            <option value="">Select analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
-            ))}
-          </select>
         </div>
 
         {(tests.data?.totalElements ?? 0) > 0 && (
@@ -95,7 +84,7 @@ export function TestsPage() {
             Test Cases {tests.data ? `(${tests.data.totalElements})` : ""}
           </div>
           {!selectedAnalysis ? (
-            <EmptyState title="Select a project and analysis to view generated tests." />
+            <EmptyState title="Select a project to view generated tests." />
           ) : tests.isLoading ? (
             <LoadingState />
           ) : tests.isError ? (

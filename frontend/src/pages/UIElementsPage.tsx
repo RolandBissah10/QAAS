@@ -69,19 +69,6 @@ export function UIElementsPage() {
           </select>
           <select
             className="rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-            value={selectedAnalysis}
-            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
-            disabled={!selectedProject}
-          >
-            <option value="">Select analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.url}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
             value={selectedPage}
             onChange={(e) => setSelectedPage(e.target.value)}
             disabled={!selectedAnalysis}
@@ -100,7 +87,7 @@ export function UIElementsPage() {
             Discovered Elements {elements.data ? `(${elements.data.length})` : ""}
           </div>
           {!selectedPage ? (
-            <EmptyState title="Select a project, analysis, and page to view UI elements." />
+            <EmptyState title="Select a project and page to view UI elements." />
           ) : elements.isLoading ? (
             <LoadingState />
           ) : elements.isError ? (

@@ -99,17 +99,6 @@ export function BugsPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <select
-            className={selectCls}
-            value={selectedAnalysis}
-            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
-            disabled={!selectedProject}
-          >
-            <option value="">Select analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
-            ))}
-          </select>
         </div>
 
         {(bugs.data?.totalElements ?? 0) > 0 && (
@@ -131,7 +120,7 @@ export function BugsPage() {
             Detected Bugs {bugs.data ? `(${bugs.data.totalElements})` : ""}
           </div>
           {!selectedAnalysis ? (
-            <EmptyState title="Select a project and analysis to view bugs." />
+            <EmptyState title="Select a project to view bugs." />
           ) : bugs.isLoading ? (
             <LoadingState />
           ) : bugs.isError ? (

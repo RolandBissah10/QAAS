@@ -25,9 +25,6 @@ export function ReportsPage() {
   const selectedAnalysis = searchParams.get("analysis") ?? "";
   const format = (searchParams.get("format") ?? "JSON") as ReportFormat;
 
-  function setSelectedAnalysis(id: string) {
-    setSearchParams({ project: selectedProject, analysis: id }, { replace: true });
-  }
   function setFormat(f: ReportFormat) {
     setSearchParams({ project: selectedProject, analysis: selectedAnalysis, format: f }, { replace: true });
   }
@@ -80,17 +77,6 @@ export function ReportsPage() {
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
-            <select
-              className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-              value={selectedAnalysis}
-              onChange={(e) => setSelectedAnalysis(e.target.value)}
-              disabled={!selectedProject}
-            >
-              <option value="">Select analysis…</option>
-              {analyses.data?.content.filter((a) => a.status === "COMPLETED").map((a) => (
-                <option key={a.id} value={a.id}>{a.url}</option>
-              ))}
-            </select>
             <div className="flex gap-2">
               {FORMATS.map((f) => (
                 <button
@@ -124,7 +110,7 @@ export function ReportsPage() {
             Generated Reports
           </div>
           {!selectedAnalysis ? (
-            <EmptyState title="Select an analysis to view its reports." />
+            <EmptyState title="Select a project to view its reports." />
           ) : reports.isLoading ? (
             <LoadingState />
           ) : reports.isError ? (

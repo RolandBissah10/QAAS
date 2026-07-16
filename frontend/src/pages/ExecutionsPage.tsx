@@ -114,17 +114,6 @@ export function ExecutionsPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <select
-            className={selectCls}
-            value={selectedAnalysis}
-            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
-            disabled={!selectedProject}
-          >
-            <option value="">Select analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
-            ))}
-          </select>
           {selectedAnalysis ? (
             <Button
               variant="secondary"
@@ -167,7 +156,7 @@ export function ExecutionsPage() {
             Execution Results {executions.data ? `(${executions.data.totalElements})` : ""}
           </div>
           {!selectedAnalysis ? (
-            <EmptyState title="Select a project and analysis to view execution results." />
+            <EmptyState title="Select a project to view execution results." />
           ) : executions.isLoading ? (
             <LoadingState />
           ) : executions.isError ? (

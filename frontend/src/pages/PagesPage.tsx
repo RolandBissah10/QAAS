@@ -61,17 +61,6 @@ export function PagesPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <select
-            className={selectCls}
-            value={selectedAnalysis}
-            onChange={(e) => setSearchParams({ project: selectedProject, analysis: e.target.value }, { replace: true })}
-            disabled={!selectedProject}
-          >
-            <option value="">Select analysis…</option>
-            {analyses.data?.content.map((a) => (
-              <option key={a.id} value={a.id}>{a.url} — {a.status}</option>
-            ))}
-          </select>
         </div>
 
         <div className="rounded-md border border-line bg-white">
@@ -79,7 +68,7 @@ export function PagesPage() {
             Page Inventory {pages.data ? `(${pages.data.totalElements})` : ""}
           </div>
           {!selectedAnalysis ? (
-            <EmptyState title="Select a project and analysis to view discovered pages." />
+            <EmptyState title="Select a project to view discovered pages." />
           ) : pages.isLoading ? (
             <LoadingState />
           ) : pages.isError ? (
