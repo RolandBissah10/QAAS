@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
@@ -83,6 +84,13 @@ export function ExecutionsPage() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
+
+  useEffect(() => {
+    const list = analyses.data?.content;
+    if (list?.length && !selectedAnalysis) {
+      setSearchParams({ project: selectedProject, analysis: list[0].id }, { replace: true });
+    }
+  }, [analyses.data, selectedAnalysis]);
 
   const execContent = executions.data?.content ?? [];
   const passed = execContent.filter((e) => e.status === "PASSED").length;

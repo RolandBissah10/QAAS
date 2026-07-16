@@ -29,6 +29,9 @@ public class Analysis {
     @Column
     private OffsetDateTime completedAt;
 
+    @Column(columnDefinition = "boolean default false")
+    private boolean deepTest = false;
+
     public Analysis() { this.id = UUID.randomUUID(); }
     public UUID getId() { return id; }
     public UUID getProjectId() { return projectId; }
@@ -43,4 +46,6 @@ public class Analysis {
     public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
     public OffsetDateTime getCompletedAt() { return completedAt; }
     public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
+    public boolean isDeepTest() { return deepTest; }
+    public void setDeepTest(boolean deepTest) { this.deepTest = deepTest; }
 }

@@ -28,6 +28,7 @@ import com.qaas.generator.entity.GeneratedTest;
 import com.qaas.generator.service.TestGenerationService;
 import com.qaas.page.entity.Page;
 import com.qaas.page.repository.PageRepository;
+import com.qaas.deeptest.DeepTestService;
 import com.qaas.notification.AnalysisNotificationEvent;
 import com.qaas.report.ReportFormat;
 import com.qaas.report.ReportService;
@@ -67,6 +68,7 @@ public class AnalysisPipelineService {
     private final ApiTestGenerationService apiTestGenerationService;
     private final ObjectMapper objectMapper;
     private final AnalysisCancellationRegistry cancellationRegistry;
+    private final DeepTestService deepTestService;
 
     public AnalysisPipelineService(AnalysisRepository analysisRepository,
                                    CrawlerService crawlerService,
@@ -82,7 +84,8 @@ public class AnalysisPipelineService {
                                    ApiEndpointRepository apiEndpointRepository,
                                    ApiTestGenerationService apiTestGenerationService,
                                    ObjectMapper objectMapper,
-                                   AnalysisCancellationRegistry cancellationRegistry) {
+                                   AnalysisCancellationRegistry cancellationRegistry,
+                                   DeepTestService deepTestService) {
         this.analysisRepository = analysisRepository;
         this.crawlerService = crawlerService;
         this.pageRepository = pageRepository;
@@ -98,6 +101,7 @@ public class AnalysisPipelineService {
         this.apiTestGenerationService = apiTestGenerationService;
         this.objectMapper = objectMapper;
         this.cancellationRegistry = cancellationRegistry;
+        this.deepTestService = deepTestService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -108,6 +112,11 @@ public class AnalysisPipelineService {
 
     @Async
     public void run(UUID analysisId, String baseUrl) {
+        run(analysisId, baseUrl, false);
+    }
+
+    @Async
+    public void run(UUID analysisId, String baseUrl, boolean deepTest) {
         log.info("Pipeline starting for analysis {} url={}", analysisId, baseUrl);
 
         Analysis meta = analysisRepository.findById(analysisId).orElse(null);
@@ -272,13 +281,24 @@ public class AnalysisPipelineService {
                 }
             }
 
-            // Final cancellation check before report generation
+            // Final cancellation check before optional deep tests + report
             if (cancellationRegistry.isCancelled(analysisId)) {
                 handleCancellation(analysisId, baseUrl, projectId, triggeredByUserId);
                 return;
             }
 
-            // Step 7: Generate report
+            // Step 7 (optional): Deep test — security, accessibility, performance, broken links
+            if (deepTest) {
+                progress.emit(analysisId, new ProgressEvent("DEEP_TESTING",
+                        "Running deep checks: security headers, accessibility, performance, broken links…", 90));
+                try {
+                    deepTestService.run(analysisId, crawled);
+                } catch (Exception e) {
+                    log.warn("Deep test step failed for analysis {}: {}", analysisId, e.getMessage());
+                }
+            }
+
+            // Step 8: Generate report
             progress.emit(analysisId, new ProgressEvent("REPORTING", "Generating quality report…", 92));
             try {
                 reportService.generate(analysisId, ReportFormat.JSON);

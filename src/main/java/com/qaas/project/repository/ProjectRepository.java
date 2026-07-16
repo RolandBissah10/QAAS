@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface ProjectRepository extends JpaRepository<Project, UUID> {
     List<Project> findByOwnerId(UUID ownerId);
+    List<Project> findByScheduleEnabledTrue();
 }

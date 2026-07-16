@@ -19,7 +19,9 @@ public interface AnalysisRepository extends JpaRepository<Analysis, UUID> {
     Page<Analysis> findByProjectId(UUID projectId, Pageable pageable);
     List<Analysis> findByProjectIdIn(Collection<UUID> projectIds);
     boolean existsByProjectIdAndUrlAndStatus(UUID projectId, String url, String status);
+    boolean existsByProjectIdAndStatus(UUID projectId, String status);
     List<Analysis> findByStatus(String status);
+    List<Analysis> findTop20ByIdInAndStatusOrderByStartedAtDesc(Collection<UUID> ids, String status);
 
     @Modifying
     @Transactional

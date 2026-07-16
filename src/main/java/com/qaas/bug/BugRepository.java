@@ -15,4 +15,9 @@ public interface BugRepository extends JpaRepository<Bug, UUID> {
     long countByStatus(BugStatus status);
     long countByAnalysisIdIn(Collection<UUID> analysisIds);
     long countBySeverityAndAnalysisIdIn(Severity severity, Collection<UUID> analysisIds);
+
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT b.analysisId, COUNT(b) FROM Bug b WHERE b.analysisId IN :ids GROUP BY b.analysisId")
+    java.util.List<Object[]> countGroupByAnalysisId(
+            @org.springframework.data.repository.query.Param("ids") Collection<UUID> ids);
 }

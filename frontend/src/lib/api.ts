@@ -5,10 +5,12 @@ import type {
   AuthResponse,
   Bug,
   DashboardSummary,
+  DeepFinding,
   DiscoveredPage,
   GeneratedTest,
   PagedResponse,
   Project,
+  ProjectMember,
   ProjectSettings,
   Report,
   ReportFormat,
@@ -102,10 +104,10 @@ export const authApi = {
 };
 
 export const dashboardApi = {
-  summary: () =>
-    api.get<DashboardSummary>("/api/dashboard/summary").then((r) => r.data),
-  trends: () =>
-    api.get<TrendPoint[]>("/api/dashboard/trends").then((r) => r.data),
+  summary: (projectId?: string) =>
+    api.get<DashboardSummary>("/api/dashboard/summary", { params: projectId ? { projectId } : {} }).then((r) => r.data),
+  trends: (projectId?: string) =>
+    api.get<TrendPoint[]>("/api/dashboard/trends", { params: projectId ? { projectId } : {} }).then((r) => r.data),
 };
 
 export const usersApi = {
@@ -116,19 +118,36 @@ export const usersApi = {
   remove: (id: string) => api.delete<void>(`/api/users/${id}`),
 };
 
+type ProjectPayload = {
+  name: string;
+  description?: string;
+  baseUrl?: string;
+  scheduleExpression?: string | null;
+  scheduleEnabled?: boolean;
+};
+
 export const projectApi = {
   list: () => api.get<Project[]>("/api/projects").then((r) => r.data),
-  create: (payload: { name: string; description?: string; baseUrl?: string }) =>
+  create: (payload: ProjectPayload) =>
     api.post<Project>("/api/projects", payload).then((r) => r.data),
-  update: (id: string, payload: { name: string; description?: string; baseUrl?: string }) =>
+  update: (id: string, payload: ProjectPayload) =>
     api.put<Project>(`/api/projects/${id}`, payload).then((r) => r.data),
   remove: (id: string) => api.delete<void>(`/api/projects/${id}`),
 };
 
+export const projectMemberApi = {
+  list: (projectId: string) =>
+    api.get<ProjectMember[]>(`/api/projects/${projectId}/members`).then((r) => r.data),
+  add: (projectId: string, payload: { email: string; role: string }) =>
+    api.post<ProjectMember>(`/api/projects/${projectId}/members`, payload).then((r) => r.data),
+  remove: (projectId: string, userId: string) =>
+    api.delete<void>(`/api/projects/${projectId}/members/${userId}`),
+};
+
 export const analysisApi = {
-  start: (projectId: string, url: string) =>
+  start: (projectId: string, url: string, deepTest = false) =>
     api
-      .post<Analysis>("/api/analysis/start", { url }, { params: { projectId } })
+      .post<Analysis>("/api/analysis/start", { url }, { params: { projectId, deep: deepTest } })
       .then((r) => r.data),
   get: (id: string) =>
     api.get<Analysis>(`/api/analysis/${id}`).then((r) => r.data),
@@ -212,6 +231,11 @@ export const screenshotApi = {
   byAnalysis: (analysisId: string) =>
     api.get<Screenshot[]>(`/api/screenshots/analysis/${analysisId}`).then((r) => r.data),
   imageUrl: (id: string) => `/api/screenshots/${id}/image`,
+};
+
+export const deepFindingApi = {
+  byAnalysis: (analysisId: string) =>
+    api.get<DeepFinding[]>(`/api/deep-findings/analysis/${analysisId}`).then((r) => r.data),
 };
 
 export const playwrightApi = {

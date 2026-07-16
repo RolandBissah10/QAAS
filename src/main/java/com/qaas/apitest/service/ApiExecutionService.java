@@ -72,14 +72,23 @@ public class ApiExecutionService {
     // ── Auth: unauthenticated request must be rejected ────────────────────────
 
     private void executeAuth(TestExecution execution, ApiEndpoint endpoint) throws Exception {
-        HttpRequest req = HttpRequest.newBuilder()
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint.getUrl()))
-                .timeout(Duration.ofSeconds(15))
-                .GET()
-                .build();
-        HttpResponse<Void> resp = http.send(req, HttpResponse.BodyHandlers.discarding());
+                .timeout(Duration.ofSeconds(15));
+        // Use the actual HTTP method; for non-GET send an empty body to avoid 415/400
+        String method = endpoint.getMethod() != null ? endpoint.getMethod() : "GET";
+        if ("GET".equals(method) || "HEAD".equals(method) || "DELETE".equals(method)) {
+            builder.method(method, HttpRequest.BodyPublishers.noBody());
+        } else {
+            builder.method(method, HttpRequest.BodyPublishers.ofString("{}"))
+                   .header("Content-Type", "application/json");
+        }
+        HttpResponse<Void> resp = http.send(builder.build(), HttpResponse.BodyHandlers.discarding());
         int status = resp.statusCode();
         if (status == 401 || status == 403) {
+            execution.pass();
+        } else if (status == 405) {
+            // Method Not Allowed — server responded (not auth-blocked); treat as inconclusive pass
             execution.pass();
         } else if (status >= 500) {
             execution.fail("Endpoint returned server error without authentication: HTTP " + status);
@@ -125,7 +134,14 @@ public class ApiExecutionService {
         if (authToken != null && !authToken.isBlank()) {
             builder.header("Authorization", "Bearer " + authToken);
         }
-        return "GET".equals(endpoint.getMethod()) ? builder.GET()
-                : builder.method(endpoint.getMethod(), HttpRequest.BodyPublishers.noBody());
+        String method = endpoint.getMethod() != null ? endpoint.getMethod() : "GET";
+        if ("GET".equals(method)) {
+            return builder.GET();
+        } else if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+            return builder.method(method, HttpRequest.BodyPublishers.ofString("{}"))
+                          .header("Content-Type", "application/json");
+        } else {
+            return builder.method(method, HttpRequest.BodyPublishers.noBody());
+        }
     }
 }

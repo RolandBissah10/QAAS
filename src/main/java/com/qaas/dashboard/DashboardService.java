@@ -8,10 +8,9 @@ import com.qaas.execution.ExecutionStatus;
 import com.qaas.execution.TestExecutionRepository;
 import com.qaas.page.repository.PageRepository;
 import com.qaas.project.entity.Project;
+import com.qaas.project.entity.ProjectMember;
+import com.qaas.project.repository.ProjectMemberRepository;
 import com.qaas.project.repository.ProjectRepository;
-import com.qaas.report.Report;
-import com.qaas.report.ReportFormat;
-import com.qaas.report.ReportRepository;
 import com.qaas.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,26 +30,26 @@ public class DashboardService {
     private final PageRepository pages;
     private final TestExecutionRepository executions;
     private final BugRepository bugs;
-    private final ReportRepository reports;
     private final ProjectRepository projects;
+    private final ProjectMemberRepository members;
     private final UserRepository users;
 
     public DashboardService(AnalysisRepository analyses, PageRepository pages,
                             TestExecutionRepository executions, BugRepository bugs,
-                            ReportRepository reports, ProjectRepository projects,
-                            UserRepository users) {
+                            ProjectRepository projects,
+                            ProjectMemberRepository members, UserRepository users) {
         this.analyses = analyses;
         this.pages = pages;
         this.executions = executions;
         this.bugs = bugs;
-        this.reports = reports;
         this.projects = projects;
+        this.members = members;
         this.users = users;
     }
 
     @Transactional(readOnly = true)
-    public DashboardDtos.SummaryResponse summary(String userEmail) {
-        List<UUID> analysisIds = resolveAnalysisIds(userEmail);
+    public DashboardDtos.SummaryResponse summary(String userEmail, UUID projectId) {
+        List<UUID> analysisIds = resolveAnalysisIds(userEmail, projectId);
         if (analysisIds.isEmpty()) {
             return new DashboardDtos.SummaryResponse(0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 0);
         }
@@ -75,52 +74,84 @@ public class DashboardService {
     }
 
     @Transactional(readOnly = true)
-    public List<DashboardDtos.TrendPoint> trends(String userEmail) {
-        List<UUID> analysisIds = resolveAnalysisIds(userEmail);
-        if (analysisIds.isEmpty()) return List.of();
+    public List<DashboardDtos.TrendPoint> trends(String userEmail, UUID projectId) {
+        List<UUID> allIds = resolveAnalysisIds(userEmail, projectId);
+        if (allIds.isEmpty()) return List.of();
 
-        List<Report> recent = reports.findTop20ByFormatAndAnalysisIdInOrderByGeneratedAtDesc(
-                ReportFormat.JSON, analysisIds);
+        // Most recent 20 completed analyses — no report generation required
+        List<Analysis> recent = analyses.findTop20ByIdInAndStatusOrderByStartedAtDesc(allIds, "COMPLETED");
         if (recent.isEmpty()) return List.of();
 
-        // Batch-load analyses and projects to avoid N+1
-        Set<UUID> reportAnalysisIds = recent.stream().map(Report::getAnalysisId).collect(Collectors.toSet());
-        Map<UUID, Analysis> analysisMap = analyses.findAllById(reportAnalysisIds)
-                .stream().collect(Collectors.toMap(Analysis::getId, a -> a));
+        List<UUID> recentIds = recent.stream().map(Analysis::getId).toList();
 
-        Set<UUID> projectIds = analysisMap.values().stream()
+        // Batch-load per-analysis counts (3 queries total)
+        Map<UUID, Long> pageCounts = toCountMap(pages.countGroupByAnalysisId(recentIds));
+        Map<UUID, Long> bugCounts  = toCountMap(bugs.countGroupByAnalysisId(recentIds));
+        Map<UUID, Map<ExecutionStatus, Long>> execCounts =
+                toStatusCountMap(executions.countByStatusGroupByAnalysisId(recentIds));
+
+        Set<UUID> projectIds = recent.stream()
                 .map(Analysis::getProjectId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<UUID, String> projectNames = projects.findAllById(projectIds)
                 .stream().collect(Collectors.toMap(Project::getId, Project::getName));
 
-        List<DashboardDtos.TrendPoint> result = new ArrayList<>();
-        for (Report r : recent) {
-            Analysis a = analysisMap.get(r.getAnalysisId());
-            if (a == null) continue;
-            String projectId   = a.getProjectId() != null ? a.getProjectId().toString() : null;
-            String projectName = projectId != null ? projectNames.getOrDefault(a.getProjectId(), "Unknown") : "Unknown";
-            result.add(new DashboardDtos.TrendPoint(
-                    r.getAnalysisId().toString(),
-                    a.getUrl(),
-                    projectId,
-                    projectName,
-                    DATE_FMT.format(r.getGeneratedAt()),
-                    r.getQualityScore(),
-                    r.getPassedTests(),
-                    r.getFailedTests(),
-                    r.getBugCount(),
-                    r.getPagesDiscovered()
-            ));
-        }
-        Collections.reverse(result);
-        return result;
+        return recent.stream().map(a -> {
+            UUID aid = a.getId();
+            Map<ExecutionStatus, Long> statusMap = execCounts.getOrDefault(aid, Map.of());
+            long p   = statusMap.getOrDefault(ExecutionStatus.PASSED, 0L);
+            long f   = statusMap.getOrDefault(ExecutionStatus.FAILED, 0L)
+                     + statusMap.getOrDefault(ExecutionStatus.ERROR,  0L);
+            long tot = p + f;
+            int quality = tot == 0 ? 0 : (int) Math.round(p * 100.0 / tot);
+            String pName = a.getProjectId() != null
+                    ? projectNames.getOrDefault(a.getProjectId(), "Unknown") : "Unknown";
+            return new DashboardDtos.TrendPoint(
+                    aid.toString(), a.getUrl(),
+                    a.getProjectId() != null ? a.getProjectId().toString() : null,
+                    pName,
+                    DATE_FMT.format(a.getStartedAt()),
+                    quality, (int) p, (int) f,
+                    bugCounts.getOrDefault(aid, 0L).intValue(),
+                    pageCounts.getOrDefault(aid, 0L).intValue()
+            );
+        }).toList();
     }
 
-    private List<UUID> resolveAnalysisIds(String userEmail) {
+    private Map<UUID, Long> toCountMap(List<Object[]> rows) {
+        Map<UUID, Long> map = new HashMap<>();
+        for (Object[] row : rows) map.put((UUID) row[0], (Long) row[1]);
+        return map;
+    }
+
+    private Map<UUID, Map<ExecutionStatus, Long>> toStatusCountMap(List<Object[]> rows) {
+        Map<UUID, Map<ExecutionStatus, Long>> map = new HashMap<>();
+        for (Object[] row : rows) {
+            UUID id = (UUID) row[0];
+            ExecutionStatus status = (ExecutionStatus) row[1];
+            Long count = (Long) row[2];
+            map.computeIfAbsent(id, k -> new HashMap<>()).put(status, count);
+        }
+        return map;
+    }
+
+    private List<UUID> resolveAnalysisIds(String userEmail, UUID projectId) {
         return users.findByEmail(userEmail)
                 .map(user -> {
-                    List<UUID> projectIds = projects.findByOwnerId(user.getId()).stream()
-                            .map(Project::getId).toList();
+                    Set<UUID> projectIds;
+                    if (projectId != null) {
+                        boolean hasAccess = projects.findById(projectId)
+                                .map(p -> p.getOwnerId().equals(user.getId()) ||
+                                          members.findByProjectIdAndUserId(projectId, user.getId()).isPresent())
+                                .orElse(false);
+                        if (!hasAccess) return List.<UUID>of();
+                        projectIds = Set.of(projectId);
+                    } else {
+                        projectIds = new HashSet<>();
+                        projects.findByOwnerId(user.getId()).stream()
+                                .map(Project::getId).forEach(projectIds::add);
+                        members.findByUserId(user.getId()).stream()
+                                .map(ProjectMember::getProjectId).forEach(projectIds::add);
+                    }
                     if (projectIds.isEmpty()) return List.<UUID>of();
                     return analyses.findByProjectIdIn(projectIds).stream()
                             .map(Analysis::getId).toList();

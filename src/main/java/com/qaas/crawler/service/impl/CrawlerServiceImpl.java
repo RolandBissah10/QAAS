@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Map;
 
 @Service
 public class CrawlerServiceImpl implements CrawlerService {
@@ -66,6 +67,19 @@ public class CrawlerServiceImpl implements CrawlerService {
             com.microsoft.playwright.Page page = browser.newPage();
             page.setDefaultNavigationTimeout(20000);
 
+            // Collect console errors per page; cleared before each navigation
+            List<String> pageConsoleErrors = new ArrayList<>();
+            page.onConsoleMessage(msg -> {
+                if ("error".equals(msg.type())) {
+                    synchronized (pageConsoleErrors) { pageConsoleErrors.add(msg.text()); }
+                }
+            });
+            page.onPageError(error -> {
+                synchronized (pageConsoleErrors) {
+                    pageConsoleErrors.add("Uncaught exception: " + error);
+                }
+            });
+
             page.onResponse(response -> {
                 try {
                     String rUrl = response.url();
@@ -113,6 +127,9 @@ public class CrawlerServiceImpl implements CrawlerService {
                 visited.add(url);
 
                 try {
+                    synchronized (pageConsoleErrors) { pageConsoleErrors.clear(); }
+                    long navStart = System.currentTimeMillis();
+
                     Response response = page.navigate(url,
                             new com.microsoft.playwright.Page.NavigateOptions()
                                     .setWaitUntil(WaitUntilState.LOAD));
@@ -133,10 +150,22 @@ public class CrawlerServiceImpl implements CrawlerService {
                     visited.add(finalUrl);
 
                     try { page.waitForTimeout(1500); } catch (Exception ignored) {}
+                    long loadTimeMs = System.currentTimeMillis() - navStart;
 
                     String title = page.title();
                     String html = page.content();
-                    results.add(new PageInfo(url, title, html));
+
+                    List<String> errors;
+                    synchronized (pageConsoleErrors) { errors = new ArrayList<>(pageConsoleErrors); }
+                    Map<String, String> headers;
+                    try { headers = new java.util.HashMap<>(response.headers()); }
+                    catch (Exception ignored) { headers = Map.of(); }
+
+                    PageInfo pageInfo = new PageInfo(url, title, html);
+                    pageInfo.setConsoleErrors(errors);
+                    pageInfo.setResponseHeaders(headers);
+                    pageInfo.setLoadTimeMs(loadTimeMs);
+                    results.add(pageInfo);
 
                     @SuppressWarnings("unchecked")
                     List<String> hrefs = (List<String>) page.evaluate(EXTRACT_LINKS_JS);
@@ -166,7 +195,7 @@ public class CrawlerServiceImpl implements CrawlerService {
 
             // Only probe common paths if not cancelled
             if (!Boolean.TRUE.equals(cancelChecker.get())) {
-                probeCommonPaths(page, baseUri, visited, results, options, cancelChecker);
+                probeCommonPaths(page, baseUri, visited, results, options, cancelChecker, pageConsoleErrors);
             }
 
             browser.close();
@@ -211,7 +240,8 @@ public class CrawlerServiceImpl implements CrawlerService {
 
     private void probeCommonPaths(com.microsoft.playwright.Page page, URI baseUri,
                                    Set<String> visited, List<PageInfo> results,
-                                   CrawlOptions options, Supplier<Boolean> cancelChecker) {
+                                   CrawlOptions options, Supplier<Boolean> cancelChecker,
+                                   List<String> pageConsoleErrors) {
         String base = baseUri.getScheme() + "://" + baseUri.getHost()
                 + (baseUri.getPort() > 0 ? ":" + baseUri.getPort() : "");
 
@@ -224,6 +254,9 @@ public class CrawlerServiceImpl implements CrawlerService {
             visited.add(url);
 
             try {
+                synchronized (pageConsoleErrors) { pageConsoleErrors.clear(); }
+                long navStart = System.currentTimeMillis();
+
                 Response response = page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
                         .setWaitUntil(WaitUntilState.LOAD).setTimeout(10000));
                 if (response == null || response.status() >= 400) continue;
@@ -242,10 +275,22 @@ public class CrawlerServiceImpl implements CrawlerService {
                 visited.add(finalUrl);
 
                 try { page.waitForTimeout(1000); } catch (Exception ignored) {}
+                long loadTimeMs = System.currentTimeMillis() - navStart;
 
                 String title = page.title();
                 String html = page.content();
-                results.add(new PageInfo(url, title, html));
+
+                List<String> errors;
+                synchronized (pageConsoleErrors) { errors = new ArrayList<>(pageConsoleErrors); }
+                Map<String, String> headers;
+                try { headers = new java.util.HashMap<>(response.headers()); }
+                catch (Exception ignored) { headers = Map.of(); }
+
+                PageInfo pageInfo = new PageInfo(url, title, html);
+                pageInfo.setConsoleErrors(errors);
+                pageInfo.setResponseHeaders(headers);
+                pageInfo.setLoadTimeMs(loadTimeMs);
+                results.add(pageInfo);
                 log.debug("Common path discovered: {}", url);
             } catch (Exception e) {
                 log.debug("Common path probe failed for {}: {}", url, e.getMessage());

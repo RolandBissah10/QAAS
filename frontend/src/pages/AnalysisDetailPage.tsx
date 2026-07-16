@@ -13,6 +13,7 @@ import {
   api,
   apiEndpointApi,
   bugApi,
+  deepFindingApi,
   downloadReport,
   executionApi,
   pageApi,
@@ -26,6 +27,8 @@ import type {
   ApiEndpoint,
   Bug,
   BugStatus,
+  DeepFinding,
+  DeepFindingCategory,
   DiscoveredPage,
   GeneratedTest,
   PagedResponse,
@@ -95,7 +98,7 @@ function ScreenshotImage({ screenshot }: { screenshot: Screenshot }) {
 
 // ── Tab types ────────────────────────────────────────────────────────────────
 
-type Tab = "pages" | "tests" | "executions" | "bugs" | "reports" | "api-endpoints";
+type Tab = "pages" | "tests" | "executions" | "bugs" | "reports" | "api-endpoints" | "deep-findings";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "pages",         label: "Pages"         },
@@ -103,8 +106,23 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "executions",    label: "Executions"    },
   { key: "bugs",          label: "Bugs"          },
   { key: "api-endpoints", label: "API Endpoints" },
+  { key: "deep-findings", label: "Deep Findings" },
   { key: "reports",       label: "Reports"       },
 ];
+
+const CATEGORY_COLORS: Record<DeepFindingCategory, string> = {
+  SECURITY:      "bg-red-100 text-red-700",
+  ACCESSIBILITY: "bg-purple-100 text-purple-700",
+  PERFORMANCE:   "bg-amber-100 text-amber-700",
+  CONSOLE_ERROR: "bg-orange-100 text-orange-700",
+  BROKEN_LINK:   "bg-slate-100 text-slate-700",
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  HIGH:   "bg-red-100 text-red-700",
+  MEDIUM: "bg-amber-100 text-amber-700",
+  LOW:    "bg-blue-100 text-blue-700",
+};
 
 const FORMATS: { value: ReportFormat; label: string }[] = [
   { value: "JSON", label: "JSON" },
@@ -176,6 +194,12 @@ export function AnalysisDetailPage() {
     queryKey: ["api-endpoints", id],
     queryFn: () => apiEndpointApi.byAnalysis(id!),
     staleTime: 60_000,
+  });
+  const deepFindings = useQuery<DeepFinding[]>({
+    queryKey: ["deep-findings", id],
+    queryFn: () => deepFindingApi.byAnalysis(id!),
+    staleTime: 60_000,
+    enabled: !!analysis.data?.deepTest,
   });
 
   const toast = useToast();
@@ -307,8 +331,9 @@ export function AnalysisDetailPage() {
               {t.key === "tests"      && tests.data      ? ` (${tests.data.totalElements})`      : ""}
               {t.key === "executions" && executions.data ? ` (${executions.data.totalElements})` : ""}
               {t.key === "bugs"       && bugs.data       ? ` (${bugs.data.totalElements})`       : ""}
-              {t.key === "api-endpoints" && apiEndpoints.data ? ` (${apiEndpoints.data.length})` : ""}
-              {t.key === "reports"    && reports.data    ? ` (${reports.data.length})`           : ""}
+              {t.key === "api-endpoints"  && apiEndpoints.data  ? ` (${apiEndpoints.data.length})`  : ""}
+              {t.key === "deep-findings" && deepFindings.data  ? ` (${deepFindings.data.length})` : ""}
+              {t.key === "reports"       && reports.data       ? ` (${reports.data.length})`      : ""}
             </button>
           ))}
         </div>
@@ -480,6 +505,38 @@ export function AnalysisDetailPage() {
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">auth</span>
                     )}
                   </div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {/* Deep Findings tab */}
+        {tab === "deep-findings" && (
+          !analysis.data?.deepTest ? (
+            <EmptyState title="This analysis was not run with Deep Test enabled. Start a new analysis with the Deep Test option to see security, accessibility, performance, and broken-link findings." />
+          ) : deepFindings.isLoading ? <LoadingState /> :
+            deepFindings.isError   ? <ErrorState message={errorMessage(deepFindings.error)} /> :
+            !deepFindings.data?.length ? <EmptyState title="No deep findings detected. The application passed all deep checks." /> : (
+            <div className="divide-y divide-line">
+              {deepFindings.data.map((f: DeepFinding) => (
+                <div key={f.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[1fr_auto_auto] sm:items-start">
+                  <div className="min-w-0">
+                    <div className="font-medium text-ink">{f.title}</div>
+                    {f.description && (
+                      <div className="mt-1 line-clamp-3 text-sm text-slate-500">{f.description}</div>
+                    )}
+                    {f.pageUrl && (
+                      <div className="mt-1 truncate font-mono text-xs text-slate-400">{f.pageUrl}</div>
+                    )}
+                    <div className="mt-1 text-xs text-slate-400">{new Date(f.detectedAt).toLocaleString()}</div>
+                  </div>
+                  <span className={`self-start rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[f.category]}`}>
+                    {f.category.replace("_", " ")}
+                  </span>
+                  <span className={`self-start rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_COLORS[f.severity]}`}>
+                    {f.severity}
+                  </span>
                 </div>
               ))}
             </div>

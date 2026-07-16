@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
@@ -68,6 +69,13 @@ export function BugsPage() {
     queryFn: () => bugApi.byAnalysis(selectedAnalysis, page),
     enabled: !!selectedAnalysis,
   });
+
+  useEffect(() => {
+    const list = analyses.data?.content;
+    if (list?.length && !selectedAnalysis) {
+      setSearchParams({ project: selectedProject, analysis: list[0].id }, { replace: true });
+    }
+  }, [analyses.data, selectedAnalysis]);
 
   const bugsContent = bugs.data?.content ?? [];
   const criticalCount = bugsContent.filter((b) => b.severity === "CRITICAL").length;

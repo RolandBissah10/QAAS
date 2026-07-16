@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
@@ -35,11 +36,19 @@ export function ApiEndpointsPage() {
 
   const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
 
+
   const analyses = useQuery({
     queryKey: ["analyses-dropdown", selectedProject],
     queryFn:  () => analysisApi.byProject(selectedProject, 0, 100),
     enabled:  !!selectedProject,
   });
+
+  useEffect(() => {
+    const list = analyses.data?.content;
+    if (list?.length && !selectedAnalysis) {
+      setSelectedAnalysis(list[0].id);
+    }
+  }, [analyses.data, selectedAnalysis]);
 
   const endpoints = useQuery<ApiEndpoint[]>({
     queryKey: ["api-endpoints", selectedAnalysis],

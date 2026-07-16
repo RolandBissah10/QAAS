@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
@@ -32,6 +33,13 @@ export function TestsPage() {
     queryFn: () => testApi.byAnalysis(selectedAnalysis, page),
     enabled: !!selectedAnalysis,
   });
+
+  useEffect(() => {
+    const list = analyses.data?.content;
+    if (list?.length && !selectedAnalysis) {
+      setSearchParams({ project: selectedProject, analysis: list[0].id }, { replace: true });
+    }
+  }, [analyses.data, selectedAnalysis]);
 
   const testsContent = tests.data?.content ?? [];
   const passed = testsContent.filter((t) => t.status === "passed").length;

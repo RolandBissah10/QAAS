@@ -26,6 +26,15 @@ public class Project {
     @Column
     private OffsetDateTime createdAt;
 
+    @Column(length = 120)
+    private String scheduleExpression;
+
+    @Column(columnDefinition = "boolean default false")
+    private boolean scheduleEnabled = false;
+
+    @Column
+    private OffsetDateTime lastScheduledAt;
+
     public Project() { this.id = UUID.randomUUID(); this.createdAt = OffsetDateTime.now(); }
     public UUID getId() { return id; }
     public String getName() { return name; }
@@ -37,4 +46,10 @@ public class Project {
     public UUID getOwnerId() { return ownerId; }
     public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
+    public String getScheduleExpression() { return scheduleExpression; }
+    public void setScheduleExpression(String scheduleExpression) { this.scheduleExpression = scheduleExpression; }
+    public boolean isScheduleEnabled() { return scheduleEnabled; }
+    public void setScheduleEnabled(boolean scheduleEnabled) { this.scheduleEnabled = scheduleEnabled; }
+    public OffsetDateTime getLastScheduledAt() { return lastScheduledAt; }
+    public void setLastScheduledAt(OffsetDateTime lastScheduledAt) { this.lastScheduledAt = lastScheduledAt; }
 }

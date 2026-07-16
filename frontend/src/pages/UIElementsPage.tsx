@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
@@ -31,6 +32,20 @@ export function UIElementsPage() {
     queryFn: () => uiElementApi.byPage(selectedPage),
     enabled: !!selectedPage,
   });
+
+  useEffect(() => {
+    const list = analyses.data?.content;
+    if (list?.length && !selectedAnalysis) {
+      setSearchParams({ project: selectedProject, analysis: list[0].id }, { replace: true });
+    }
+  }, [analyses.data, selectedAnalysis]);
+
+  useEffect(() => {
+    const list = pages.data?.content;
+    if (list?.length && !selectedPage) {
+      setSearchParams({ project: selectedProject, analysis: selectedAnalysis, page: list[0].id }, { replace: true });
+    }
+  }, [pages.data, selectedPage]);
 
   return (
     <>

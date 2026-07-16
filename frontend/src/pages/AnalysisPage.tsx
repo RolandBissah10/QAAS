@@ -6,7 +6,7 @@ import { Link } from "react-router-dom";
 import { AnalysisProgress } from "../components/AnalysisProgress";
 import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingState } from "../components/DataState";
-import { Field, TextInput } from "../components/Field";
+import { Field } from "../components/Field";
 import { PageHeader } from "../components/PageHeader";
 import { Pagination } from "../components/Pagination";
 import { StatusPill } from "../components/StatusPill";
@@ -24,7 +24,7 @@ export function AnalysisPage() {
   const selectedProject = searchParams.get("project") ?? "";
   const page = parseInt(searchParams.get("page") ?? "0", 10);
 
-  const [url, setUrl] = useState("");
+  const [deepTest, setDeepTest] = useState(false);
 
   function setPage(p: number) {
     setSearchParams({ project: selectedProject, page: String(p) }, { replace: true });
@@ -41,10 +41,12 @@ export function AnalysisPage() {
     },
   });
 
+  const selectedProjectData = projects.data?.find((p) => p.id === selectedProject);
+  const projectUrl = selectedProjectData?.baseUrl ?? "";
+
   const start = useMutation({
-    mutationFn: () => analysisApi.start(selectedProject, url),
+    mutationFn: () => analysisApi.start(selectedProject, projectUrl, deepTest),
     onSuccess: async () => {
-      setUrl("");
       await queryClient.invalidateQueries({ queryKey: ["analyses", selectedProject] });
       toast.info("Analysis started — the pipeline is running in the background.");
     },
@@ -83,8 +85,6 @@ export function AnalysisPage() {
               onChange={(e) => {
                 const projectId = e.target.value;
                 setSearchParams(projectId ? { project: projectId } : {}, { replace: true });
-                const picked = projects.data?.find((p) => p.id === projectId);
-                if (picked?.baseUrl) setUrl(picked.baseUrl);
               }}
               required
             >
@@ -96,18 +96,25 @@ export function AnalysisPage() {
               ))}
             </select>
           </Field>
-          <Field label="Application URL">
-            <TextInput
-              type="url"
-              placeholder="https://myapp.com"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              required
+          {selectedProject && !projectUrl && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              No URL set for this project. Add an Application URL in{" "}
+              <a href="/projects" className="underline">Project Settings</a>.
+            </p>
+          )}
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-md border border-line px-3 py-2.5 text-sm hover:bg-slate-50">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-brand"
+              checked={deepTest}
+              onChange={(e) => setDeepTest(e.target.checked)}
             />
-          </Field>
-          <Button className="w-full" loading={start.isPending} type="submit">
+            <span className="font-medium text-ink">Deep Test</span>
+            <span className="text-slate-400">— security, accessibility, performance &amp; broken links</span>
+          </label>
+          <Button className="w-full" loading={start.isPending} type="submit" disabled={!selectedProject || !projectUrl}>
             <Play className="h-4 w-4" />
-            Start Analysis
+            {deepTest ? "Start Deep Analysis" : "Start Analysis"}
           </Button>
         </form>
 

@@ -10,7 +10,6 @@ import { TestsPage } from "./pages/TestsPage";
 import { ExecutionsPage } from "./pages/ExecutionsPage";
 import { BugsPage } from "./pages/BugsPage";
 import { ReportsPage } from "./pages/ReportsPage";
-import { ResultsPage } from "./pages/ResultsPage";
 import { ApiEndpointsPage } from "./pages/ApiEndpointsPage";
 import { UIElementsPage } from "./pages/UIElementsPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -38,7 +37,6 @@ export function App() {
         <Route path="/executions" element={<ExecutionsPage />} />
         <Route path="/bugs" element={<BugsPage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/results" element={<ResultsPage />} />
         <Route path="/api-endpoints" element={<ApiEndpointsPage />} />
         <Route path="/elements" element={<UIElementsPage />} />
         <Route path="/users" element={<UsersPage />} />

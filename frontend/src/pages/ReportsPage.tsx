@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, FileText } from "lucide-react";
@@ -42,6 +43,13 @@ export function ReportsPage() {
     queryFn: () => reportApi.byAnalysis(selectedAnalysis),
     enabled: !!selectedAnalysis,
   });
+
+  useEffect(() => {
+    const completed = analyses.data?.content.filter((a) => a.status === "COMPLETED") ?? [];
+    if (completed.length && !selectedAnalysis) {
+      setSearchParams({ project: selectedProject, analysis: completed[0].id }, { replace: true });
+    }
+  }, [analyses.data, selectedAnalysis]);
 
   const generate = useMutation({
     mutationFn: () => reportApi.generate(selectedAnalysis, format),

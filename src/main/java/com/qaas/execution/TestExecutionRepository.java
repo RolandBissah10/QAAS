@@ -27,4 +27,10 @@ public interface TestExecutionRepository extends JpaRepository<TestExecution, UU
            "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId IN :analysisIds)")
     long countByStatusAndAnalysisIds(@Param("status") ExecutionStatus status,
                                      @Param("analysisIds") Collection<UUID> analysisIds);
+
+    @Query("SELECT p.analysisId, e.status, COUNT(e) " +
+           "FROM TestExecution e, com.qaas.page.entity.Page p " +
+           "WHERE e.test.pageId = p.id AND p.analysisId IN :ids " +
+           "GROUP BY p.analysisId, e.status")
+    List<Object[]> countByStatusGroupByAnalysisId(@Param("ids") Collection<UUID> ids);
 }

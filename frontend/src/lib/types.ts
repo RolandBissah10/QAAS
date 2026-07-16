@@ -34,6 +34,18 @@ export interface Project {
   baseUrl?: string;
   ownerId: string;
   createdAt: string;
+  scheduleExpression?: string;
+  scheduleEnabled: boolean;
+  owner: boolean;       // true = user is the owner; false = user is a member
+  memberRole?: string;  // VIEWER | TESTER (only set when owner=false)
+}
+
+export interface ProjectMember {
+  userId: string;
+  email: string;
+  displayName?: string;
+  role: string;
+  joinedAt: string;
 }
 
 export interface Analysis {
@@ -43,6 +55,25 @@ export interface Analysis {
   status: AnalysisStatus;
   startedAt: string;
   completedAt?: string;
+  deepTest: boolean;
+}
+
+export type DeepFindingCategory =
+  | "SECURITY"
+  | "ACCESSIBILITY"
+  | "PERFORMANCE"
+  | "CONSOLE_ERROR"
+  | "BROKEN_LINK";
+
+export interface DeepFinding {
+  id: string;
+  analysisId: string;
+  category: DeepFindingCategory;
+  severity: "HIGH" | "MEDIUM" | "LOW";
+  title: string;
+  description?: string;
+  pageUrl?: string;
+  detectedAt: string;
 }
 
 export interface DiscoveredPage {

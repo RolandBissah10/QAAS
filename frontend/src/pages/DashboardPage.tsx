@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Activity, Bug, CheckCircle2, Globe2, Layers, XCircle, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import {
@@ -17,7 +18,7 @@ import {
 } from "recharts";
 import { PageHeader } from "../components/PageHeader";
 import { ErrorState, LoadingState } from "../components/DataState";
-import { dashboardApi } from "../lib/api";
+import { dashboardApi, projectApi } from "../lib/api";
 import { errorMessage } from "../lib/errors";
 
 const BRAND   = "#0d9488";
@@ -74,13 +75,26 @@ function EmptyChart({ height = 220 }: { height?: number }) {
 }
 
 export function DashboardPage() {
-  const summary = useQuery({ queryKey: ["dashboard-summary"], queryFn: dashboardApi.summary, staleTime: 60_000 });
-  const trends  = useQuery({ queryKey: ["dashboard-trends"],  queryFn: dashboardApi.trends,  staleTime: 60_000 });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject = searchParams.get("project") ?? "";
+
+  const projects = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+
+  const summary = useQuery({
+    queryKey: ["dashboard-summary", selectedProject],
+    queryFn: () => dashboardApi.summary(selectedProject || undefined),
+    staleTime: 60_000,
+  });
+  const trends = useQuery({
+    queryKey: ["dashboard-trends", selectedProject],
+    queryFn: () => dashboardApi.trends(selectedProject || undefined),
+    staleTime: 60_000,
+  });
 
   if (summary.isLoading) return <LoadingState />;
   if (summary.isError)   return <ErrorState message={errorMessage(summary.error)} />;
 
-  const d = summary.data;
+  const d = summary.data!;
 
   const cards = [
     { label: "Apps Analyzed",    value: d?.applicationsAnalyzed ?? 0,        icon: Zap,          color: "text-teal-600"    },
@@ -103,13 +117,39 @@ export function DashboardPage() {
 
   const trendData = trends.data ?? [];
 
+  const selectedProjectName = projects.data?.find((p) => p.id === selectedProject)?.name;
+
   return (
     <>
       <PageHeader
         title="Dashboard"
-        description="Platform-wide quality metrics across all applications and analyses."
+        description={
+          selectedProjectName
+            ? `Quality metrics for ${selectedProjectName}.`
+            : "Platform-wide quality metrics across all applications and analyses."
+        }
       />
       <div className="grid gap-4 p-4 sm:p-6">
+
+        {/* Project filter */}
+        <div className="flex items-center gap-3">
+          <label htmlFor="dash-project" className="text-sm font-medium text-slate-600 shrink-0">
+            Project
+          </label>
+          <select
+            id="dash-project"
+            value={selectedProject}
+            onChange={(e) =>
+              setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })
+            }
+            className="rounded-md border border-line bg-white px-3 py-1.5 text-sm text-ink shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+          >
+            <option value="">All projects</option>
+            {projects.data?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
 
         {/* Summary cards */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

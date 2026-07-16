@@ -1,10 +1,14 @@
 package com.qaas.execution;
 
 import com.microsoft.playwright.*;
+import com.qaas.analysis.entity.Analysis;
+import com.qaas.analysis.repository.AnalysisRepository;
 import com.qaas.apitest.service.ApiExecutionService;
 import com.qaas.common.PagedResponse;
 import com.qaas.generator.entity.GeneratedTest;
 import com.qaas.playwright.service.PlaywrightService;
+import com.qaas.project.settings.ProjectSettings;
+import com.qaas.project.settings.ProjectSettingsRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
@@ -22,16 +26,21 @@ public class ExecutionService {
     private final TestExecutionRepository executions;
     private final PlaywrightService playwright;
     private final ApiExecutionService apiExecutionService;
-
     private final ScriptedTestExecutor scriptedTestExecutor;
+    private final AnalysisRepository analysisRepository;
+    private final ProjectSettingsRepository settingsRepository;
 
     public ExecutionService(TestExecutionRepository executions, PlaywrightService playwright,
                             ApiExecutionService apiExecutionService,
-                            ScriptedTestExecutor scriptedTestExecutor) {
+                            ScriptedTestExecutor scriptedTestExecutor,
+                            AnalysisRepository analysisRepository,
+                            ProjectSettingsRepository settingsRepository) {
         this.executions = executions;
         this.playwright = playwright;
         this.apiExecutionService = apiExecutionService;
         this.scriptedTestExecutor = scriptedTestExecutor;
+        this.analysisRepository = analysisRepository;
+        this.settingsRepository = settingsRepository;
     }
 
     /** Called from the analysis pipeline — reuses a shared authenticated browser context. */
@@ -39,7 +48,7 @@ public class ExecutionService {
     public TestExecution execute(GeneratedTest test, UUID analysisId, BrowserContext sharedContext) {
         TestExecution execution = executions.save(new TestExecution(test));
         try {
-            String failReason = runTest(test, sharedContext);
+            String failReason = runTest(test, sharedContext, analysisId);
             if (failReason == null) execution.pass();
             else execution.fail(failReason);
             try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
@@ -58,7 +67,7 @@ public class ExecutionService {
             Browser browser = launchBrowser(pw);
             BrowserContext context = browser.newContext();
             try {
-                String failReason = runTest(test, context);
+                String failReason = runTest(test, context, analysisId);
                 if (failReason == null) execution.pass();
                 else execution.fail(failReason);
                 try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
@@ -86,12 +95,23 @@ public class ExecutionService {
         return executions.save(execution);
     }
 
-    private String runTest(GeneratedTest test, BrowserContext context) {
+    private String runTest(GeneratedTest test, BrowserContext context, UUID analysisId) {
         String type = test.getType() != null ? test.getType() : "smoke";
         return switch (type) {
             case "scripted"   -> scriptedTestExecutor.execute(test.getScriptJson(), test.getTargetUrl(), context);
             case "functional" -> executeFunctional(test.getTargetUrl(), context);
-            case "auth"       -> executeAuth(test.getTargetUrl(), context);
+            case "auth"       -> {
+                String username = null, password = null;
+                Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
+                if (analysis != null) {
+                    ProjectSettings settings = settingsRepository.findByProjectId(analysis.getProjectId()).orElse(null);
+                    if (settings != null) {
+                        username = settings.getAuthUsername();
+                        password = settings.getAuthPassword();
+                    }
+                }
+                yield executeAuth(test.getTargetUrl(), context, username, password);
+            }
             default           -> executeSmoke(test.getTargetUrl(), context);
         };
     }
@@ -151,7 +171,7 @@ public class ExecutionService {
         }
     }
 
-    private String executeAuth(String url, BrowserContext context) {
+    private String executeAuth(String url, BrowserContext context, String username, String password) {
         com.microsoft.playwright.Page page = context.newPage();
         try {
             page.setDefaultNavigationTimeout(15000);
@@ -159,13 +179,16 @@ public class ExecutionService {
             if (response == null || response.status() >= 400)
                 return "HTTP " + (response != null ? response.status() : "no response");
 
+            String effectiveUsername = (username != null && !username.isBlank()) ? username : "qaas.tester@test.com";
+            String effectivePassword = (password != null && !password.isBlank()) ? password : "TestPassword1!";
+
             Locator emailInput = page.locator(
                     "input[type=email], input[name*=email i], input[name*=username i], input[placeholder*=email i]"
             ).first();
-            if (emailInput.isVisible()) emailInput.fill("qaas.tester@test.com");
+            if (emailInput.isVisible()) emailInput.fill(effectiveUsername);
 
             Locator passwordInput = page.locator("input[type=password]").first();
-            if (passwordInput.isVisible()) passwordInput.fill("TestPassword1!");
+            if (passwordInput.isVisible()) passwordInput.fill(effectivePassword);
 
             Locator submitBtn = page.locator("button[type=submit], input[type=submit]").first();
             if (submitBtn.isVisible()) {
