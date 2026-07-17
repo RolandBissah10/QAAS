@@ -181,7 +181,7 @@ public class RecordingService {
             analysisRepo.findTopByProjectIdAndStatusOrderByStartedAtDesc(projectId, "COMPLETED")
                     .ifPresent(a -> pageRepo.findByAnalysisId(a.getId()).stream()
                             .map(com.qaas.page.entity.Page::getUrl)
-                            .distinct().limit(50).forEach(urlsToVisit::add));
+                            .distinct().limit(20).forEach(urlsToVisit::add));
 
             harFile = Files.createTempFile("capture-" + recordingId, ".har");
             final Path finalHarFile = harFile;
@@ -202,7 +202,7 @@ public class RecordingService {
                     if (captureRegistry.isCancelled(recordingId)) break;
                     try {
                         page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
-                                .setTimeout(20_000).setWaitUntil(WaitUntilState.NETWORKIDLE));
+                                .setTimeout(10_000).setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
                         log.debug("Capture navigated to {}", url);
                     } catch (Exception e) {
                         log.debug("Capture: skipping unreachable {}: {}", url, e.getMessage());
