@@ -1,5 +1,6 @@
 package com.qaas.user;
 
+import com.qaas.auth.repository.RefreshTokenRepository;
 import com.qaas.exception.BadRequestException;
 import com.qaas.exception.NotFoundException;
 import org.junit.jupiter.api.Test;
@@ -24,6 +25,9 @@ import static org.mockito.Mockito.when;
 class UserServiceTest {
     @Mock
     UserRepository users;
+
+    @Mock
+    RefreshTokenRepository refreshTokens;
 
     @InjectMocks
     UserService service;
@@ -72,6 +76,7 @@ class UserServiceTest {
 
         service.deleteUser("owner@qaas.dev", userId);
 
+        verify(refreshTokens).deleteByUser(user);
         verify(users).delete(user);
     }
 
