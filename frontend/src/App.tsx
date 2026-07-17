@@ -15,6 +15,7 @@ import { UIElementsPage } from "./pages/UIElementsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { AnalysisDetailPage } from "./pages/AnalysisDetailPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { RecordingsPage } from "./pages/RecordingsPage";
 
 function ProtectedRoute() {
   const { accessToken } = useAuth();
@@ -39,6 +40,7 @@ export function App() {
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/api-endpoints" element={<ApiEndpointsPage />} />
         <Route path="/elements" element={<UIElementsPage />} />
+        <Route path="/recordings" element={<RecordingsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Route>

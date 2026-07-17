@@ -22,6 +22,7 @@ public interface AnalysisRepository extends JpaRepository<Analysis, UUID> {
     boolean existsByProjectIdAndStatus(UUID projectId, String status);
     List<Analysis> findByStatus(String status);
     List<Analysis> findTop20ByIdInAndStatusOrderByStartedAtDesc(Collection<UUID> ids, String status);
+    java.util.Optional<Analysis> findTopByProjectIdAndStatusOrderByStartedAtDesc(UUID projectId, String status);
 
     @Modifying
     @Transactional

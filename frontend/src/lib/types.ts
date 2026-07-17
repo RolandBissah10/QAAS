@@ -178,6 +178,41 @@ export interface DashboardSummary {
   lowBugs: number;
 }
 
+export type RecordingStatus = "PROCESSING" | "CAPTURING" | "READY" | "ERROR";
+
+export interface Recording {
+  id: string;
+  projectId: string;
+  name: string;
+  targetUrl?: string;
+  status: RecordingStatus;
+  entryCount: number;
+  apiEndpointCount: number;
+  capturedAt?: string;
+  createdAt: string;
+  errorMessage?: string;
+}
+
+export interface RecordingEntry {
+  id: string;
+  method: string;
+  url: string;
+  statusCode: number;
+  requestHeaders?: string;
+  requestBody?: string;
+  responseHeaders?: string;
+  responseBody?: string;
+  timeTaken: number;
+  startedAt?: string;
+  entryIndex: number;
+}
+
+export interface RecordingStats {
+  totalEntries: number;
+  errorCount: number;
+  avgTimeTakenMs: number;
+}
+
 export interface TrendPoint {
   analysisId: string;
   analysisUrl: string;

@@ -13,6 +13,7 @@ import {
   Sun,
   TestTube2,
   Users,
+  Video,
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -39,8 +40,9 @@ const nav: NavItem[] = [
   { to: "/bugs",          label: "Bugs",          icon: Bug,           roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/api-endpoints", label: "API Endpoints", icon: Network,   roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/reports",       label: "Reports",       icon: FileText,  roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/elements", label: "UI Elements", icon: ScanLine, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/users", label: "Team", icon: Users, roles: ["OWNER"] },
+  { to: "/elements",    label: "UI Elements",  icon: ScanLine, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/recordings",  label: "Recordings",   icon: Video,    roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/users",       label: "Team",         icon: Users,    roles: ["OWNER"] },
 ];
 
 export function AppLayout() {

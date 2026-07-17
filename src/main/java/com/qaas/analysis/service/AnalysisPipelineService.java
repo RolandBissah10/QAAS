@@ -6,6 +6,9 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.options.HarContentPolicy;
+import com.microsoft.playwright.options.HarMode;
+import com.qaas.recording.RecordingService;
 import com.qaas.analysis.AnalysisCancellationRegistry;
 import com.qaas.analysis.ProgressEmitterRegistry;
 import com.qaas.analysis.dto.ProgressEvent;
@@ -40,6 +43,8 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,6 +74,7 @@ public class AnalysisPipelineService {
     private final ObjectMapper objectMapper;
     private final AnalysisCancellationRegistry cancellationRegistry;
     private final DeepTestService deepTestService;
+    private final RecordingService recordingService;
 
     public AnalysisPipelineService(AnalysisRepository analysisRepository,
                                    CrawlerService crawlerService,
@@ -85,7 +91,8 @@ public class AnalysisPipelineService {
                                    ApiTestGenerationService apiTestGenerationService,
                                    ObjectMapper objectMapper,
                                    AnalysisCancellationRegistry cancellationRegistry,
-                                   DeepTestService deepTestService) {
+                                   DeepTestService deepTestService,
+                                   RecordingService recordingService) {
         this.analysisRepository = analysisRepository;
         this.crawlerService = crawlerService;
         this.pageRepository = pageRepository;
@@ -102,6 +109,7 @@ public class AnalysisPipelineService {
         this.objectMapper = objectMapper;
         this.cancellationRegistry = cancellationRegistry;
         this.deepTestService = deepTestService;
+        this.recordingService = recordingService;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -178,15 +186,21 @@ public class AnalysisPipelineService {
                     20));
 
             // Steps 2–5: one shared browser context for all test executions
+            Path harFile = Files.createTempFile("analysis-" + analysisId, ".har");
             try (Playwright pw = Playwright.create()) {
                 Browser browser = pw.chromium().launch(new BrowserType.LaunchOptions()
                         .setHeadless(true)
                         .setChromiumSandbox(false)
                         .setArgs(List.of("--disable-dev-shm-usage", "--no-first-run")));
-                BrowserContext sharedContext = (crawlResult.storageStateJson() != null)
-                        ? browser.newContext(new Browser.NewContextOptions()
-                                .setStorageState(crawlResult.storageStateJson()))
-                        : browser.newContext();
+
+                Browser.NewContextOptions ctxOpts = new Browser.NewContextOptions()
+                        .setRecordHarPath(harFile)
+                        .setRecordHarContent(HarContentPolicy.EMBED)
+                        .setRecordHarMode(HarMode.FULL);
+                if (crawlResult.storageStateJson() != null) {
+                    ctxOpts = ctxOpts.setStorageState(crawlResult.storageStateJson());
+                }
+                BrowserContext sharedContext = browser.newContext(ctxOpts);
                 try {
                     int total = crawled.size();
                     for (int i = 0; i < total; i++) {
@@ -244,9 +258,20 @@ public class AnalysisPipelineService {
                         }
                     }
                 } finally {
-                    sharedContext.close();
+                    sharedContext.close(); // flushes HAR to disk
                     browser.close();
                 }
+
+                // Auto-create a recording from the captured HAR (non-fatal)
+                if (projectId != null && !cancellationRegistry.isCancelled(analysisId)) {
+                    try {
+                        recordingService.processHarFromAnalysis(projectId, analysisId, baseUrl, harFile);
+                    } catch (Exception e) {
+                        log.warn("Auto-recording failed for analysis {}: {}", analysisId, e.getMessage());
+                    }
+                }
+            } finally {
+                Files.deleteIfExists(harFile);
             }
 
             // Check again before API tests

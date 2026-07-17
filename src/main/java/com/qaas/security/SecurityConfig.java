@@ -38,7 +38,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/dashboard/**", "/api/pages/**", "/api/tests/**",
                         "/api/executions/**", "/api/bugs/**", "/api/reports/**",
                         "/api/ui-elements/**", "/api/screenshots/**",
-                        "/api/api-endpoints/**", "/api/deep-findings/**").hasAnyRole("OWNER", "TESTER", "VIEWER")
+                        "/api/api-endpoints/**", "/api/deep-findings/**",
+                        "/api/recordings/**").hasAnyRole("OWNER", "TESTER", "VIEWER")
+                .requestMatchers(HttpMethod.DELETE, "/api/recordings/**").hasAnyRole("OWNER", "TESTER")
+                .requestMatchers(HttpMethod.POST, "/api/recordings/**").hasAnyRole("OWNER", "TESTER")
                 .requestMatchers(HttpMethod.PATCH, "/api/bugs/**").hasAnyRole("OWNER", "TESTER")
                 .requestMatchers(HttpMethod.GET, "/api/projects/**").hasAnyRole("OWNER", "TESTER", "VIEWER")
                 .requestMatchers(HttpMethod.PUT, "/api/projects/**").hasAnyRole("OWNER", "TESTER")

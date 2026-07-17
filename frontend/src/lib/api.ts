@@ -12,6 +12,9 @@ import type {
   Project,
   ProjectMember,
   ProjectSettings,
+  Recording,
+  RecordingEntry,
+  RecordingStats,
   Report,
   ReportFormat,
   Role,
@@ -236,6 +239,28 @@ export const screenshotApi = {
 export const deepFindingApi = {
   byAnalysis: (analysisId: string) =>
     api.get<DeepFinding[]>(`/api/deep-findings/analysis/${analysisId}`).then((r) => r.data),
+};
+
+export const recordingApi = {
+  list: (projectId: string) =>
+    api.get<Recording[]>("/api/recordings", { params: { projectId } }).then((r) => r.data),
+  upload: (projectId: string, name: string, file: File) => {
+    const form = new FormData();
+    form.append("projectId", projectId);
+    form.append("name", name);
+    form.append("file", file);
+    return api.post<Recording>("/api/recordings/upload", form).then((r) => r.data);
+  },
+  entries: (id: string, page = 0, size = 100) =>
+    api
+      .get<PagedResponse<RecordingEntry>>(`/api/recordings/${id}/entries`, { params: { page, size } })
+      .then((r) => r.data),
+  stats: (id: string) =>
+    api.get<RecordingStats>(`/api/recordings/${id}/stats`).then((r) => r.data),
+  capture: (projectId: string) =>
+    api.post<Recording>("/api/recordings/capture", null, { params: { projectId } }).then((r) => r.data),
+  stop: (id: string) => api.post<void>(`/api/recordings/${id}/stop`),
+  remove: (id: string) => api.delete<void>(`/api/recordings/${id}`),
 };
 
 export const playwrightApi = {
