@@ -202,7 +202,8 @@ public class RecordingService {
                     if (captureRegistry.isCancelled(recordingId)) break;
                     try {
                         page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
-                                .setTimeout(10_000).setWaitUntil(WaitUntilState.DOMCONTENTLOADED));
+                                .setTimeout(10_000).setWaitUntil(WaitUntilState.LOAD));
+                        page.waitForTimeout(1_500); // let SPA component-mount API calls fire
                         log.debug("Capture navigated to {}", url);
                     } catch (Exception e) {
                         log.debug("Capture: skipping unreachable {}: {}", url, e.getMessage());
