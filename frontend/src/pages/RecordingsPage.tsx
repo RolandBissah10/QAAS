@@ -380,7 +380,7 @@ function DetailView({
 
       {/* Stats bar */}
       {stats.data && (
-        <div className="flex items-center gap-6 border-b border-line bg-white px-4 py-2 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line bg-white px-4 py-2 text-xs text-slate-500">
           <span><span className="font-semibold text-ink">{stats.data.totalEntries}</span> requests</span>
           <span><span className="font-semibold text-ink">{recording.apiEndpointCount}</span> API calls</span>
           <span className={stats.data.errorCount > 0 ? "text-red-600 font-medium" : ""}>
@@ -412,14 +412,14 @@ function DetailView({
           value={urlSearch}
           onChange={(e) => setUrlSearch(e.target.value)}
           placeholder="Filter by URL…"
-          className="ml-auto rounded-md border border-line px-3 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 w-48"
+          className="ml-auto w-full rounded-md border border-line px-3 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500 sm:w-48"
         />
       </div>
 
       {/* Entry list + detail panel */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Entry list */}
-        <div className={`flex flex-col overflow-y-auto ${selectedEntry ? "w-1/2" : "w-full"}`}>
+        {/* Entry list — hidden on mobile when a detail panel is open */}
+        <div className={`flex flex-col overflow-y-auto ${selectedEntry ? "hidden md:flex md:w-1/2" : "w-full"}`}>
           {entries.isLoading && <LoadingState />}
           {entries.isError && <ErrorState message={errorMessage(entries.error)} />}
           {!entries.isLoading && filtered.length === 0 && (
@@ -469,9 +469,9 @@ function DetailView({
           )}
         </div>
 
-        {/* Detail panel */}
+        {/* Detail panel — full width on mobile, half width on md+ */}
         {selectedEntry && (
-          <div className="w-1/2 overflow-hidden">
+          <div className="w-full overflow-hidden md:w-1/2">
             <EntryDetail entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
           </div>
         )}

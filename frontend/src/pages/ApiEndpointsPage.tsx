@@ -92,34 +92,31 @@ export function ApiEndpointsPage() {
           <div className="rounded-md border border-line bg-white">
             <div className="divide-y divide-line">
               {endpoints.data.map((ep) => (
-                <div key={ep.id} className="flex items-center gap-4 px-4 py-3">
-                  {/* Method badge */}
-                  <span
-                    className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold uppercase ${
-                      METHOD_COLORS[ep.method] ?? "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {ep.method}
-                  </span>
-
-                  {/* URL */}
+                <div key={ep.id} className="grid gap-1.5 px-4 py-3 sm:flex sm:items-center sm:gap-3">
+                  {/* Top row: method + status + auth */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold uppercase ${
+                        METHOD_COLORS[ep.method] ?? "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {ep.method}
+                    </span>
+                    {ep.observedStatus != null && (
+                      <span className={`shrink-0 text-xs font-semibold ${statusColor(ep.observedStatus)}`}>
+                        {ep.observedStatus}
+                      </span>
+                    )}
+                    {ep.requiresAuth && (
+                      <span className="shrink-0 rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                        Auth
+                      </span>
+                    )}
+                  </div>
+                  {/* URL — full width on mobile, flex-1 on desktop */}
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink" title={ep.url}>
                     {ep.url}
                   </span>
-
-                  {/* HTTP status */}
-                  {ep.observedStatus != null && (
-                    <span className={`shrink-0 text-xs font-semibold ${statusColor(ep.observedStatus)}`}>
-                      {ep.observedStatus}
-                    </span>
-                  )}
-
-                  {/* Auth required */}
-                  {ep.requiresAuth && (
-                    <span className="shrink-0 rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
-                      Auth
-                    </span>
-                  )}
                 </div>
               ))}
             </div>

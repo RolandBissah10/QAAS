@@ -138,7 +138,7 @@ export function ExecutionsPage() {
         </div>
 
         {(executions.data?.totalElements ?? 0) > 0 && (
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-3">
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">
               Passed: <span className="font-bold">{passed}</span>
             </div>

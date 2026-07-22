@@ -314,28 +314,37 @@ export function AnalysisDetailPage() {
 
       {/* Tabs */}
       <div className="rounded-md border border-line bg-white">
-        <div className="flex overflow-x-auto border-b border-line">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`shrink-0 px-5 py-3 text-sm font-medium transition-colors ${
-                tab === t.key
-                  ? "border-b-2 border-brand text-brand"
-                  : "text-slate-500 hover:text-ink"
-              }`}
-            >
-              {t.label}
-              {t.key === "pages"      && pages.data      ? ` (${pages.data.totalElements})`      : ""}
-              {t.key === "tests"      && tests.data      ? ` (${tests.data.totalElements})`      : ""}
-              {t.key === "executions" && executions.data ? ` (${executions.data.totalElements})` : ""}
-              {t.key === "bugs"       && bugs.data       ? ` (${bugs.data.totalElements})`       : ""}
-              {t.key === "api-endpoints"  && apiEndpoints.data  ? ` (${apiEndpoints.data.length})`  : ""}
-              {t.key === "deep-findings" && deepFindings.data  ? ` (${deepFindings.data.length})` : ""}
-              {t.key === "reports"       && reports.data       ? ` (${reports.data.length})`      : ""}
-            </button>
-          ))}
+        <div className="flex overflow-x-auto border-b border-line scrollbar-none">
+          {TABS.map((t) => {
+            const count =
+              t.key === "pages"         && pages.data         ? pages.data.totalElements
+              : t.key === "tests"       && tests.data         ? tests.data.totalElements
+              : t.key === "executions"  && executions.data    ? executions.data.totalElements
+              : t.key === "bugs"        && bugs.data          ? bugs.data.totalElements
+              : t.key === "api-endpoints"  && apiEndpoints.data ? apiEndpoints.data.length
+              : t.key === "deep-findings"  && deepFindings.data ? deepFindings.data.length
+              : t.key === "reports"        && reports.data      ? reports.data.length
+              : null;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setTab(t.key)}
+                className={`shrink-0 px-3 py-2.5 text-xs font-medium transition-colors sm:px-5 sm:py-3 sm:text-sm ${
+                  tab === t.key
+                    ? "border-b-2 border-brand text-brand"
+                    : "text-slate-500 hover:text-ink"
+                }`}
+              >
+                {t.label}
+                {count != null && (
+                  <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Pages tab */}
@@ -481,7 +490,7 @@ export function AnalysisDetailPage() {
           !apiEndpoints.data?.length ? <EmptyState title="No API endpoints discovered. Run an analysis to detect endpoints." /> : (
             <div className="divide-y divide-line">
               {apiEndpoints.data.map((ep) => (
-                <div key={ep.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div key={ep.id} className="grid gap-1.5 px-4 py-3 sm:flex sm:items-center sm:justify-between sm:gap-4">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium text-ink">{ep.url}</div>
                     <div className="mt-0.5 text-xs text-slate-400">
@@ -489,6 +498,9 @@ export function AnalysisDetailPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono font-semibold text-slate-700">
+                      {ep.method}
+                    </span>
                     {ep.observedStatus != null && (
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                         ep.observedStatus < 300 ? "bg-emerald-100 text-emerald-700" :
@@ -498,9 +510,6 @@ export function AnalysisDetailPage() {
                         {ep.observedStatus}
                       </span>
                     )}
-                    <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono font-semibold text-slate-700">
-                      {ep.method}
-                    </span>
                     {ep.requiresAuth && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">auth</span>
                     )}

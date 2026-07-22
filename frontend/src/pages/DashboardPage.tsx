@@ -142,7 +142,7 @@ export function DashboardPage() {
             onChange={(e) =>
               setSearchParams(e.target.value ? { project: e.target.value } : {}, { replace: true })
             }
-            className="rounded-md border border-line bg-white px-3 py-1.5 text-sm text-ink shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="min-w-0 flex-1 rounded-md border border-line bg-white px-3 py-1.5 text-sm text-ink shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
           >
             <option value="">All projects</option>
             {projects.data?.map((p) => (

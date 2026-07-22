@@ -62,7 +62,8 @@ public class TestGenerationServiceImpl implements TestGenerationService {
                 out.add(save(pageId, pageUrl, "Smoke: checkout page UI elements present", "smoke"));
             }
             case "PRODUCT" -> {
-                out.add(save(pageId, pageUrl, "Functional: product details visible and add-to-cart present", "functional"));
+                // No hardcoded template — the AI-generated test handles product pages
+                // based on what elements are actually present in the HTML
             }
             default -> {
                 if (hasForm || hasInputs)

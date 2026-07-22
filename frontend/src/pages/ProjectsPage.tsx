@@ -354,7 +354,7 @@ function ProjectSettingsPanel({ project }: { project: Project }) {
 
   return (
     <div>
-      <div className="flex gap-1 border-t border-line bg-white px-4 py-2">
+      <div className="flex flex-wrap gap-1 border-t border-line bg-white px-4 py-2">
         {tabBtn("crawl", "Crawl")}
         {tabBtn("schedule", "Schedule")}
         {project.owner && tabBtn("members", "Members")}

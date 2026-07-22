@@ -86,7 +86,7 @@ export function PagesPage() {
                         <div className="mt-0.5 truncate text-xs text-slate-500">{p.title}</div>
                       )}
                     </div>
-                    {p.pageType && <StatusPill status={p.pageType} />}
+                    {p.pageType && <StatusPill status={p.pageType} className="shrink-0" />}
                   </div>
                 ))}
               </div>

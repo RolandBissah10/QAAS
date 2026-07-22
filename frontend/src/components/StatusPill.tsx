@@ -17,10 +17,10 @@ const colorMap: Record<string, string> = {
   JSON: "bg-teal-50 text-teal-700 ring-teal-200",
 };
 
-export function StatusPill({ status }: { status: string }) {
+export function StatusPill({ status, className = "" }: { status: string; className?: string }) {
   const style = colorMap[status] ?? "bg-slate-50 text-slate-600 ring-slate-200";
   return (
-    <span className={`rounded-full px-2 py-1 text-xs font-semibold ring-1 ${style}`}>
+    <span className={`rounded-full px-2 py-1 text-xs font-semibold ring-1 ${style} ${className}`}>
       {status.replace("_", " ")}
     </span>
   );

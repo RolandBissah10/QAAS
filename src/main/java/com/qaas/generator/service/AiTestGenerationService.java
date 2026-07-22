@@ -99,12 +99,11 @@ public class AiTestGenerationService {
             click a button, verify a result) — not just a page load check.
 
             Rules:
+            - ONLY use selectors and elements that are explicitly listed above in "Interactive elements" or visible in the "Relevant HTML". Do NOT invent elements, buttons, or actions that are not present in the provided content.
+            - If no interactive elements exist on the page, generate a simple assertText or assertVisible test based on what IS present.
             - Use realistic but safe test data (e.g. test@example.com, TestPassword1!)
             - Assert on something that proves the action worked (URL change, text appearing, etc.)
             - Keep selectors simple and robust (prefer type/name/placeholder over deeply nested paths)
-            - For login pages: attempt login and assert the URL changes or an element appears
-            - For forms: fill fields and submit, then assert the response
-            - For product pages: look for an add-to-cart or similar button and click it
 
             Respond ONLY with a JSON array — no markdown, no explanation, just the array.
 

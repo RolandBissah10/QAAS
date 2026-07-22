@@ -102,7 +102,7 @@ export function BugsPage() {
         </div>
 
         {(bugs.data?.totalElements ?? 0) > 0 && (
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-3">
             <div className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
               Critical: <span className="font-bold">{criticalCount}</span>
             </div>

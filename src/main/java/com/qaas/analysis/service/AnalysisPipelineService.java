@@ -396,11 +396,20 @@ public class AnalysisPipelineService {
     }
 
     private String classifyPage(String url) {
-        String lower = url.toLowerCase();
+        // Extract path only (ignore query params/fragments which cause false matches)
+        String path;
+        try {
+            path = new java.net.URI(url).getPath();
+            if (path == null) path = "";
+        } catch (Exception e) {
+            path = url;
+        }
+        String lower = path.toLowerCase();
         if (lower.contains("login") || lower.contains("signin")) return "LOGIN";
         if (lower.contains("register") || lower.contains("signup")) return "REGISTER";
         if (lower.contains("checkout") || lower.contains("payment")) return "CHECKOUT";
-        if (lower.contains("product") || lower.contains("item")) return "PRODUCT";
+        // Require "/product" or "/products" as a path segment — avoid matching query params or unrelated words
+        if (lower.matches(".*/products?(/.*)?") ) return "PRODUCT";
         if (lower.contains("profile") || lower.contains("account")) return "PROFILE";
         if (lower.contains("cart") || lower.contains("basket")) return "CART";
         return "GENERAL";

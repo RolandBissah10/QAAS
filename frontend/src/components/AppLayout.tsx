@@ -31,18 +31,18 @@ interface NavItem {
 }
 
 const nav: NavItem[] = [
-  { to: "/", label: "Dashboard", icon: BarChart3, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/analysis", label: "Analysis", icon: Zap, roles: ["OWNER", "TESTER"] },
-  { to: "/pages", label: "Pages", icon: Globe2, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/tests", label: "Tests", icon: TestTube2, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/executions", label: "Executions", icon: PlayCircle, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/bugs",          label: "Bugs",          icon: Bug,           roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/api-endpoints", label: "API Endpoints", icon: Network,   roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/reports",       label: "Reports",       icon: FileText,  roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/elements",    label: "UI Elements",  icon: ScanLine, roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/recordings",  label: "Recordings",   icon: Video,    roles: ["OWNER", "TESTER", "VIEWER"] },
-  { to: "/users",       label: "Team",         icon: Users,    roles: ["OWNER"] },
+  { to: "/",            label: "Dashboard",  icon: BarChart3,    roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/projects",    label: "Projects",   icon: FolderKanban, roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/analysis",    label: "Analysis",   icon: Zap,          roles: ["OWNER", "TESTER"] },
+  { to: "/recordings",  label: "Recordings", icon: Video,        roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/pages",       label: "Pages",      icon: Globe2,       roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/tests",       label: "Tests",      icon: TestTube2,    roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/executions",  label: "Executions", icon: PlayCircle,   roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/bugs",        label: "Bugs",       icon: Bug,          roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/api-endpoints", label: "APIs",     icon: Network,      roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/reports",     label: "Reports",    icon: FileText,     roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/elements",    label: "Elements",   icon: ScanLine,     roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/users",       label: "Team",       icon: Users,        roles: ["OWNER"] },
 ];
 
 export function AppLayout() {
@@ -63,6 +63,8 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-panel">
+
+      {/* ── Desktop sidebar ───────────────────────────────────────────────────── */}
       <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-white md:block">
         <div className="flex h-16 items-center border-b border-line px-5">
           <div>
@@ -85,20 +87,25 @@ export function AppLayout() {
                   }`
                 }
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
               </NavLink>
             );
           })}
         </nav>
       </aside>
+
+      {/* ── Content ───────────────────────────────────────────────────────────── */}
       <div className="md:pl-64">
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-white px-4 md:px-6">
           <div className="min-w-0 md:hidden">
             <div className="font-semibold text-ink">QAAS AI</div>
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-3">
-            <Link to="/profile" className="hidden min-w-0 text-right text-sm sm:block hover:opacity-75 transition-opacity">
+            <Link
+              to="/profile"
+              className="hidden min-w-0 text-right text-sm sm:block hover:opacity-75 transition-opacity"
+            >
               <div className="truncate font-medium text-ink">{user?.displayName || user?.email}</div>
               <div className="text-xs text-slate-500">{user?.role}</div>
             </Link>
@@ -110,12 +117,15 @@ export function AppLayout() {
             </Button>
           </div>
         </header>
+
         <main className="min-h-[calc(100vh-4rem)] pb-20 md:pb-0">
           <Outlet />
         </main>
       </div>
+
+      {/* ── Mobile bottom tab bar ─────────────────────────────────────────────── */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white shadow-soft md:hidden">
-        <div className="flex overflow-x-auto">
+        <div className="flex overflow-x-auto scrollbar-none">
           {visibleNav.map((item) => {
             const Icon = item.icon;
             const savedSearch = sessionStorage.getItem(`qaas.search${item.to}`) ?? "";
@@ -125,13 +135,19 @@ export function AppLayout() {
                 to={`${item.to}${savedSearch}`}
                 end={item.to === "/"}
                 className={({ isActive }) =>
-                  `flex h-16 min-w-[76px] flex-col items-center justify-center gap-1 px-2 text-[11px] font-medium ${
-                    isActive ? "text-brand" : "text-slate-500"
+                  `flex h-16 min-w-[64px] flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-medium transition-colors ${
+                    isActive ? "text-brand" : "text-slate-500 hover:text-ink"
                   }`
                 }
               >
-                <Icon className="h-5 w-5" />
-                <span className="max-w-full truncate">{item.label}</span>
+                {({ isActive }) => (
+                  <>
+                    <div className={`rounded-lg p-1 transition-colors ${isActive ? "bg-teal-50" : ""}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span className="max-w-[60px] truncate leading-tight">{item.label}</span>
+                  </>
+                )}
               </NavLink>
             );
           })}

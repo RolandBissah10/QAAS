@@ -335,9 +335,17 @@ public class CrawlerServiceImpl implements CrawlerService {
     private boolean isApiEndpoint(String url, Response response, URI baseUri) {
         try {
             URI u = URI.create(url);
-            if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) return false;
+            // Accept same host or any subdomain of the base domain
+            if (!sameOrRelatedHost(u.getHost(), baseUri.getHost())) return false;
             if (isStaticAsset(url)) return false;
 
+            // Non-GET/HEAD/OPTIONS methods are almost always API calls
+            String method = response.request().method().toUpperCase();
+            if (!method.equals("GET") && !method.equals("HEAD") && !method.equals("OPTIONS")) {
+                return true;
+            }
+
+            // Content-Type based detection
             try {
                 Map<String, String> headers = response.headers();
                 if (headers != null) {
@@ -345,20 +353,38 @@ public class CrawlerServiceImpl implements CrawlerService {
                     if (ct.contains("application/json")
                             || ct.contains("application/xml")
                             || ct.contains("text/xml")
-                            || ct.contains("application/graphql")) {
+                            || ct.contains("application/graphql")
+                            || ct.contains("application/ld+json")) {
                         return true;
                     }
                 }
             } catch (Exception ignored) {}
 
+            // Path-based detection — catches both top-level and nested API paths
             String path = u.getPath() == null ? "" : u.getPath().toLowerCase();
-            return path.startsWith("/api/") || path.startsWith("/v1/")
-                    || path.startsWith("/v2/") || path.startsWith("/v3/")
+            return path.startsWith("/api/") || path.contains("/api/")
+                    || path.startsWith("/v1/") || path.startsWith("/v2/")
+                    || path.startsWith("/v3/") || path.startsWith("/v4/")
                     || path.startsWith("/rest/") || path.startsWith("/graphql")
                     || path.startsWith("/query") || path.startsWith("/gql");
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private boolean sameOrRelatedHost(String host1, String host2) {
+        if (host1 == null || host2 == null) return false;
+        if (host1.equalsIgnoreCase(host2)) return true;
+        // Accept subdomains — api.example.com matches example.com
+        String root1 = rootDomain(host1);
+        String root2 = rootDomain(host2);
+        return !root1.isEmpty() && root1.equalsIgnoreCase(root2);
+    }
+
+    private String rootDomain(String host) {
+        String[] parts = host.split("\\.");
+        if (parts.length < 2) return host;
+        return parts[parts.length - 2] + "." + parts[parts.length - 1];
     }
 
     private boolean isStaticAsset(String url) {
@@ -383,7 +409,7 @@ public class CrawlerServiceImpl implements CrawlerService {
 
     private boolean sameHost(String url, URI baseUri) {
         try {
-            return baseUri.getHost().equalsIgnoreCase(URI.create(url).getHost());
+            return sameOrRelatedHost(URI.create(url).getHost(), baseUri.getHost());
         } catch (Exception e) {
             return false;
         }
