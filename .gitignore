@@ -4,3 +4,7 @@ target/
 *.iml
 *.log
 src/main/resources/application-local.yml
+
+# Frontend
+frontend/node_modules/.vite/
+frontend/netlify.toml
