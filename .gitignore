@@ -3,8 +3,12 @@ target/
 .vscode/
 *.iml
 *.log
+.env
 src/main/resources/application-local.yml
 
 # Frontend
 frontend/node_modules/.vite/
 frontend/netlify.toml
+
+
+/QAAS advanced features.pdf

@@ -34,7 +34,12 @@ public class BugController {
     record StatusRequest(BugStatus status) {}
 
     @PatchMapping("/{id}/status")
-    ResponseEntity<BugDtos.BugResponse> updateStatus(@PathVariable UUID id, @RequestBody StatusRequest body) {
+    ResponseEntity<BugDtos.BugResponse> updateStatus(@PathVariable UUID id,
+                                                     @RequestBody StatusRequest body,
+                                                     Authentication auth) {
+        // Authorize via the owning analysis' project — the global role alone is not enough.
+        UUID analysisId = service.findAnalysisId(id);
+        projectService.verifyAnalysisAccess(analysisId, auth.getName());
         return ResponseEntity.ok(service.updateStatus(id, body.status()));
     }
 }

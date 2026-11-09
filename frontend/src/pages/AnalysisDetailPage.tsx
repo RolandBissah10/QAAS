@@ -384,7 +384,14 @@ export function AnalysisDetailPage() {
                 {tests.data.content.map((t) => (
                   <div key={t.id} className="flex items-center justify-between gap-4 px-4 py-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-ink">{t.name}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-medium text-ink">{t.name}</div>
+                        {t.name.startsWith("AI Journey:") && (
+                          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                            End-to-end journey
+                          </span>
+                        )}
+                      </div>
                       {t.targetUrl && <div className="mt-0.5 truncate text-xs text-slate-500">{t.targetUrl}</div>}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">

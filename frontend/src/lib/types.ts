@@ -87,12 +87,72 @@ export interface DiscoveredPage {
 
 export interface GeneratedTest {
   id: string;
-  pageId: string;
+  pageId?: string;
+  analysisId?: string;
+  apiEndpointId?: string;
   name: string;
   type: string;
   status: string;
   targetUrl?: string;
 }
+
+export interface TestSuite {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  tests: SuiteTest[];
+}
+
+export interface TestEnvironment {
+  id: string;
+  projectId: string;
+  name: string;
+  baseUrl: string;
+  authUsername?: string;
+  credentialsConfigured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SuiteTest {
+  id: string;
+  name: string;
+  type: string;
+  targetUrl?: string;
+}
+
+export type TestSuiteRunStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED";
+export type TestSuiteItemStatus = "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "ERROR";
+
+export interface TestSuiteRunItem {
+  id: string;
+  testId: string;
+  testName: string;
+  status: TestSuiteItemStatus;
+  executionId?: string;
+  executionStatus?: ExecutionStatus;
+  errorMessage?: string;
+}
+
+export interface TestSuiteRun {
+  id: string;
+  suiteId: string;
+  status: TestSuiteRunStatus;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  errorTests: number;
+  environmentName?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  items: TestSuiteRunItem[];
+}
+
+export type TestSuiteRunSummary = Omit<TestSuiteRun, "items">;
 
 export interface TestExecution {
   id: string;

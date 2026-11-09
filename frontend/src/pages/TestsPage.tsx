@@ -49,7 +49,7 @@ export function TestsPage() {
     <>
       <PageHeader
         title="Generated Tests"
-        description="UI test cases generated automatically from discovered pages."
+        description="AI journeys and UI test cases generated from discovered pages."
       />
       <div className="grid gap-4 p-4 sm:p-6">
         <div className="flex flex-wrap gap-3">
@@ -97,7 +97,14 @@ export function TestsPage() {
                 {testsContent.map((test) => (
                   <div key={test.id} className="flex items-center justify-between gap-4 px-4 py-3">
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-ink">{test.name}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="text-sm font-medium text-ink">{test.name}</div>
+                        {test.name.startsWith("AI Journey:") && (
+                          <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700">
+                            End-to-end journey
+                          </span>
+                        )}
+                      </div>
                       {test.targetUrl && (
                         <div className="mt-0.5 truncate text-xs text-slate-500">{test.targetUrl}</div>
                       )}

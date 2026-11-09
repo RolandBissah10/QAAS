@@ -12,7 +12,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
 
 @Service
@@ -23,7 +25,7 @@ public class ApiExecutionService {
     private final ApiEndpointRepository endpoints;
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
-            .followRedirects(HttpClient.Redirect.NORMAL)
+            .followRedirects(HttpClient.Redirect.NEVER)
             .build();
 
     public ApiExecutionService(ApiEndpointRepository endpoints) {
@@ -31,6 +33,11 @@ public class ApiExecutionService {
     }
 
     public void execute(TestExecution execution, GeneratedTest test, String authToken) {
+        execute(execution, test, authToken, null, null, null);
+    }
+
+    public void execute(TestExecution execution, GeneratedTest test, String authToken,
+                        String targetUrl, String authUsername, String authPassword) {
         UUID endpointId = test.getApiEndpointId();
         if (endpointId == null) {
             execution.fail("No API endpoint linked to this test");
@@ -41,11 +48,14 @@ public class ApiExecutionService {
             execution.fail("API endpoint not found: " + endpointId);
             return;
         }
+        String effectiveUrl = targetUrl == null ? endpoint.getUrl() : targetUrl;
         try {
             switch (test.getType()) {
-                case "api-smoke"  -> executeSmoke(execution, endpoint, authToken);
-                case "api-auth"   -> executeAuth(execution, endpoint);
-                case "api-schema" -> executeSchema(execution, endpoint, authToken);
+                case "api-smoke"  -> executeSmoke(execution, endpoint, effectiveUrl,
+                        authToken, authUsername, authPassword);
+                case "api-auth"   -> executeAuth(execution, endpoint, effectiveUrl);
+                case "api-schema" -> executeSchema(execution, endpoint, effectiveUrl,
+                        authToken, authUsername, authPassword);
                 default           -> execution.fail("Unknown API test type: " + test.getType());
             }
         } catch (Exception e) {
@@ -56,10 +66,11 @@ public class ApiExecutionService {
 
     // ── Smoke: endpoint must not return 5xx ───────────────────────────────────
 
-    private void executeSmoke(TestExecution execution, ApiEndpoint endpoint, String authToken)
+    private void executeSmoke(TestExecution execution, ApiEndpoint endpoint, String targetUrl,
+                              String authToken, String authUsername, String authPassword)
             throws Exception {
         HttpResponse<Void> resp = http.send(
-                buildRequest(endpoint, authToken).build(),
+                buildRequest(endpoint, targetUrl, authToken, authUsername, authPassword).build(),
                 HttpResponse.BodyHandlers.discarding());
         int status = resp.statusCode();
         if (status >= 500) {
@@ -71,9 +82,9 @@ public class ApiExecutionService {
 
     // ── Auth: unauthenticated request must be rejected ────────────────────────
 
-    private void executeAuth(TestExecution execution, ApiEndpoint endpoint) throws Exception {
+    private void executeAuth(TestExecution execution, ApiEndpoint endpoint, String targetUrl) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint.getUrl()))
+                .uri(URI.create(targetUrl))
                 .timeout(Duration.ofSeconds(15));
         // Use the actual HTTP method; for non-GET send an empty body to avoid 415/400
         String method = endpoint.getMethod() != null ? endpoint.getMethod() : "GET";
@@ -99,10 +110,11 @@ public class ApiExecutionService {
 
     // ── Schema: response body must be valid JSON ──────────────────────────────
 
-    private void executeSchema(TestExecution execution, ApiEndpoint endpoint, String authToken)
+    private void executeSchema(TestExecution execution, ApiEndpoint endpoint, String targetUrl,
+                               String authToken, String authUsername, String authPassword)
             throws Exception {
         HttpResponse<String> resp = http.send(
-                buildRequest(endpoint, authToken).build(),
+                buildRequest(endpoint, targetUrl, authToken, authUsername, authPassword).build(),
                 HttpResponse.BodyHandlers.ofString());
         int status = resp.statusCode();
         if (status >= 400) {
@@ -126,13 +138,19 @@ public class ApiExecutionService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private HttpRequest.Builder buildRequest(ApiEndpoint endpoint, String authToken) {
+    private HttpRequest.Builder buildRequest(ApiEndpoint endpoint, String targetUrl, String authToken,
+                                             String authUsername, String authPassword) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(endpoint.getUrl()))
+                .uri(URI.create(targetUrl))
                 .timeout(Duration.ofSeconds(15))
                 .header("Accept", "application/json");
         if (authToken != null && !authToken.isBlank()) {
             builder.header("Authorization", "Bearer " + authToken);
+        } else if (authUsername != null && !authUsername.isBlank()
+                && authPassword != null && !authPassword.isBlank()) {
+            String credentials = authUsername + ":" + authPassword;
+            builder.header("Authorization", "Basic " + Base64.getEncoder()
+                    .encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
         }
         String method = endpoint.getMethod() != null ? endpoint.getMethod() : "GET";
         if ("GET".equals(method)) {

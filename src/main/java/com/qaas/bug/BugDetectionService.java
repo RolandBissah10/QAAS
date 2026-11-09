@@ -35,6 +35,14 @@ public class BugDetectionService {
         return bugs.save(bug);
     }
 
+    /** The analysis a bug belongs to, so callers can authorize against its project. */
+    @Transactional(readOnly = true)
+    public UUID findAnalysisId(UUID bugId) {
+        return bugs.findById(bugId)
+                .map(Bug::getAnalysisId)
+                .orElseThrow(() -> new com.qaas.exception.NotFoundException("Bug not found: " + bugId));
+    }
+
     @Transactional(readOnly = true)
     public PagedResponse<BugDtos.BugResponse> getByAnalysis(UUID analysisId, Pageable pageable) {
         var paged = bugs.findByAnalysisId(analysisId, pageable);

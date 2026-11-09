@@ -30,7 +30,9 @@ public class GeneratedTestController {
             Authentication auth) {
         projectService.verifyAnalysisAccess(analysisId, auth.getName());
         var paged = tests.findByAnalysisId(analysisId,
-                PageRequest.of(page, size, Sort.by("id").ascending()));
+                PageRequest.of(page, size, Sort.by(
+                        Sort.Order.asc("name"),
+                        Sort.Order.asc("id"))));
         return PagedResponse.from(paged);
     }
 }

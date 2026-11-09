@@ -1,10 +1,12 @@
 package com.qaas.execution;
 
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.HttpCredentials;
 import com.qaas.analysis.entity.Analysis;
 import com.qaas.analysis.repository.AnalysisRepository;
 import com.qaas.apitest.service.ApiExecutionService;
 import com.qaas.common.PagedResponse;
+import com.qaas.common.ApplicationUrlScope;
 import com.qaas.generator.entity.GeneratedTest;
 import com.qaas.playwright.service.PlaywrightService;
 import com.qaas.project.settings.ProjectSettings;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.net.URI;
 import java.util.UUID;
 
 @Service
@@ -48,7 +51,8 @@ public class ExecutionService {
     public TestExecution execute(GeneratedTest test, UUID analysisId, BrowserContext sharedContext) {
         TestExecution execution = executions.save(new TestExecution(test));
         try {
-            String failReason = runTest(test, sharedContext, analysisId);
+            String failReason = runTest(test, sharedContext, analysisId, test.getTargetUrl(),
+                    null, null, true);
             if (failReason == null) execution.pass();
             else execution.fail(failReason);
             try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
@@ -66,8 +70,10 @@ public class ExecutionService {
         try (Playwright pw = Playwright.create()) {
             Browser browser = launchBrowser(pw);
             BrowserContext context = browser.newContext();
+            restrictNavigationToOrigin(context, test.getTargetUrl());
             try {
-                String failReason = runTest(test, context, analysisId);
+                String failReason = runTest(test, context, analysisId, test.getTargetUrl(),
+                        null, null, true);
                 if (failReason == null) execution.pass();
                 else execution.fail(failReason);
                 try { playwright.captureScreenshot(analysisId, test.getTargetUrl()); } catch (Exception ignored) {}
@@ -95,25 +101,110 @@ public class ExecutionService {
         return executions.save(execution);
     }
 
-    private String runTest(GeneratedTest test, BrowserContext context, UUID analysisId) {
+    @Transactional
+    public TestExecution executeInEnvironment(GeneratedTest test, UUID analysisId, String targetUrl,
+                                              String authUsername, String authPassword) {
+        TestExecution execution = executions.save(new TestExecution(test));
+        try (Playwright pw = Playwright.create()) {
+            Browser browser = launchBrowser(pw);
+            Browser.NewContextOptions contextOptions = new Browser.NewContextOptions();
+            if (authUsername != null && !authUsername.isBlank()
+                    && authPassword != null && !authPassword.isBlank()) {
+                contextOptions.setHttpCredentials(
+                        new HttpCredentials(authUsername, authPassword).setOrigin(originOf(targetUrl)));
+            }
+            BrowserContext context = browser.newContext(contextOptions);
+            context.route("**/*", route -> {
+                try {
+                    com.qaas.security.PublicHttpUrlValidator.validate(route.request().url());
+                    if (route.request().isNavigationRequest()
+                            && route.request().frame().parentFrame() == null
+                            && !ApplicationUrlScope.isSameOrigin(targetUrl, route.request().url())) {
+                        log.warn("Blocked test navigation outside the selected application origin");
+                        route.abort();
+                        return;
+                    }
+                    route.resume();
+                } catch (com.qaas.exception.BadRequestException exception) {
+                    log.warn("Blocked environment test navigation to a non-public or unsupported destination");
+                    route.abort();
+                }
+            });
+            try {
+                String failure = runTest(test, context, analysisId, targetUrl,
+                        authUsername, authPassword, false);
+                if (failure == null) execution.pass();
+                else execution.fail(failure);
+                try { playwright.captureScreenshot(analysisId, targetUrl); } catch (Exception ignored) {}
+            } finally {
+                context.close();
+                browser.close();
+            }
+        } catch (Exception exception) {
+            log.warn("Environment execution error for '{}': {}", test.getName(), exception.getMessage());
+            if (execution.getErrorMessage() == null) {
+                execution.fail("Browser error: " + exception.getMessage());
+            }
+        }
+        return executions.save(execution);
+    }
+
+    public void restrictNavigationToOrigin(BrowserContext context, String applicationUrl) {
+        context.route("**/*", route -> {
+            if (route.request().isNavigationRequest()
+                    && route.request().frame().parentFrame() == null
+                    && !ApplicationUrlScope.isSameOrigin(applicationUrl, route.request().url())) {
+                log.warn("Blocked test navigation outside the target application origin");
+                route.abort();
+                return;
+            }
+            route.resume();
+        });
+    }
+
+    @Transactional
+    public TestExecution executeApiTestInEnvironment(GeneratedTest test, UUID analysisId, String targetUrl,
+                                                    String authUsername, String authPassword) {
+        TestExecution execution = executions.save(new TestExecution(test));
+        try {
+            apiExecutionService.execute(execution, test, null, targetUrl, authUsername, authPassword);
+        } catch (Exception exception) {
+            log.warn("Environment API execution error for '{}': {}", test.getName(), exception.getMessage());
+            if (execution.getErrorMessage() == null) {
+                execution.fail("Request failed: " + exception.getMessage());
+            }
+        }
+        return executions.save(execution);
+    }
+
+    private String runTest(GeneratedTest test, BrowserContext context, UUID analysisId, String targetUrl,
+                           String authUsername, String authPassword, boolean useProjectCredentials) {
         String type = test.getType() != null ? test.getType() : "smoke";
         return switch (type) {
-            case "scripted"   -> scriptedTestExecutor.execute(test.getScriptJson(), test.getTargetUrl(), context);
-            case "functional" -> executeFunctional(test.getTargetUrl(), context);
+            case "scripted"   -> scriptedTestExecutor.execute(test.getScriptJson(), targetUrl, context);
+            case "functional" -> executeFunctional(targetUrl, context);
             case "auth"       -> {
-                String username = null, password = null;
-                Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
-                if (analysis != null) {
-                    ProjectSettings settings = settingsRepository.findByProjectId(analysis.getProjectId()).orElse(null);
-                    if (settings != null) {
-                        username = settings.getAuthUsername();
-                        password = settings.getAuthPassword();
+                String username = authUsername;
+                String password = authPassword;
+                if (useProjectCredentials) {
+                    Analysis analysis = analysisRepository.findById(analysisId).orElse(null);
+                    if (analysis != null) {
+                        ProjectSettings settings = settingsRepository.findByProjectId(analysis.getProjectId()).orElse(null);
+                        if (settings != null) {
+                            username = settings.getAuthUsername();
+                            password = settings.getAuthPassword();
+                        }
                     }
                 }
-                yield executeAuth(test.getTargetUrl(), context, username, password);
+                yield executeAuth(targetUrl, context, username, password);
             }
-            default           -> executeSmoke(test.getTargetUrl(), context);
+            default           -> executeSmoke(targetUrl, context);
         };
+    }
+
+    private String originOf(String url) {
+        URI uri = URI.create(url);
+        return uri.getScheme() + "://" + uri.getRawAuthority();
     }
 
     private String executeSmoke(String url, BrowserContext context) {

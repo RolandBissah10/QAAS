@@ -1,12 +1,15 @@
 package com.qaas.crawler.service.impl;
 
 import com.microsoft.playwright.*;
+import com.microsoft.playwright.options.WaitForSelectorState;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.qaas.common.ApplicationUrlScope;
 import com.qaas.crawler.dto.ApiEndpointInfo;
 import com.qaas.crawler.dto.CrawlOptions;
 import com.qaas.crawler.dto.CrawlResult;
 import com.qaas.crawler.dto.PageInfo;
 import com.qaas.crawler.service.CrawlerService;
+import com.qaas.exception.BadRequestException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,14 +32,6 @@ public class CrawlerServiceImpl implements CrawlerService {
              .filter(h => h && h.length > 0)
         """;
 
-    private static final List<String> COMMON_PATHS = List.of(
-        "/dashboard", "/home", "/profile", "/settings", "/account",
-        "/admin", "/analytics", "/reports", "/users", "/products",
-        "/orders", "/notifications", "/messages", "/search",
-        "/help", "/about", "/contact", "/projects", "/teams",
-        "/invoices", "/billing", "/integrations", "/api-keys"
-    );
-
     private static final Pattern SITEMAP_LOC = Pattern.compile("<loc>([^<]+)</loc>", Pattern.CASE_INSENSITIVE);
 
     @Override
@@ -46,15 +41,15 @@ public class CrawlerServiceImpl implements CrawlerService {
         List<PageInfo> results = new ArrayList<>();
         List<ApiEndpointInfo> capturedApiEndpoints = new ArrayList<>();
         Set<String> seenApiKeys = new HashSet<>();
-        queue.add(baseUrl);
 
         URI baseUri;
         try {
             baseUri = URI.create(baseUrl);
         } catch (Exception e) {
-            log.warn("Invalid base URL: {}", baseUrl);
-            return new CrawlResult(results, null, List.of());
+            throw new BadRequestException("Invalid crawler URL");
         }
+        CrawlTargetValidator.validate(baseUrl);
+        queue.add(baseUrl);
 
         String storageStateJson = null;
 
@@ -65,6 +60,22 @@ public class CrawlerServiceImpl implements CrawlerService {
                     .setArgs(List.of("--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"));
             Browser browser = pw.chromium().launch(opts);
             com.microsoft.playwright.Page page = browser.newPage();
+            page.route("**/*", route -> {
+                try {
+                    CrawlTargetValidator.validate(route.request().url());
+                    if (route.request().isNavigationRequest()
+                            && route.request().frame().parentFrame() == null
+                            && !ApplicationUrlScope.isSameOrigin(baseUrl, route.request().url())) {
+                        log.debug("Blocked crawler navigation outside the target application origin");
+                        route.abort();
+                        return;
+                    }
+                    route.resume();
+                } catch (BadRequestException e) {
+                    log.warn("Blocked crawler request to a non-public or unsupported destination");
+                    route.abort();
+                }
+            });
             page.setDefaultNavigationTimeout(20000);
 
             // Collect console errors per page; cleared before each navigation
@@ -94,7 +105,11 @@ public class CrawlerServiceImpl implements CrawlerService {
             });
 
             if (options.hasAuth()) {
-                doLogin(page, options);
+                CrawlTargetValidator.validate(options.authUrl());
+                if (!doLogin(page, options)) {
+                    throw new IllegalStateException(
+                            "Configured application login failed; verify the project login URL and credentials.");
+                }
                 try {
                     storageStateJson = page.context().storageState();
                 } catch (Exception e) {
@@ -174,14 +189,14 @@ public class CrawlerServiceImpl implements CrawlerService {
                                 || href.startsWith("mailto:") || href.startsWith("javascript:")) continue;
                         try {
                             URI u = URI.create(href);
-                            if (!baseUri.getHost().equalsIgnoreCase(u.getHost())) continue;
+                            if (!ApplicationUrlScope.isSameOrigin(baseUri.toString(), href)) continue;
 
-                            String fragment = (u.getFragment() != null && !u.getFragment().isBlank())
-                                    ? "#" + u.getFragment() : "";
-                            String path = (u.getPath() == null || u.getPath().isBlank()) ? "/" : u.getPath();
+                            String path = (u.getRawPath() == null || u.getRawPath().isBlank())
+                                    ? "/" : u.getRawPath();
+                            String query = u.getRawQuery() == null ? "" : "?" + u.getRawQuery();
                             String normalized = u.getScheme() + "://" + u.getHost()
                                     + (u.getPort() > 0 ? ":" + u.getPort() : "")
-                                    + path + fragment;
+                                    + path + query;
 
                             if (!visited.contains(normalized) && !isExcluded(normalized, options.excludedPatterns())) {
                                 queue.add(normalized);
@@ -191,11 +206,6 @@ public class CrawlerServiceImpl implements CrawlerService {
                 } catch (Exception e) {
                     log.debug("Skipping {} — {}", url, e.getMessage());
                 }
-            }
-
-            // Only probe common paths if not cancelled
-            if (!Boolean.TRUE.equals(cancelChecker.get())) {
-                probeCommonPaths(page, baseUri, visited, results, options, cancelChecker, pageConsoleErrors);
             }
 
             browser.close();
@@ -224,7 +234,7 @@ public class CrawlerServiceImpl implements CrawlerService {
                     String loc = m.group(1).trim();
                     try {
                         URI u = URI.create(loc);
-                        if (baseUri.getHost().equalsIgnoreCase(u.getHost())) {
+                        if (ApplicationUrlScope.isSameOrigin(baseUri.toString(), loc)) {
                             urls.add(loc);
                         }
                     } catch (Exception ignored) {}
@@ -236,93 +246,101 @@ public class CrawlerServiceImpl implements CrawlerService {
         return urls;
     }
 
-    // ── Common path probing ───────────────────────────────────────────────────
+    // ── Login ─────────────────────────────────────────────────────────────────
 
-    private void probeCommonPaths(com.microsoft.playwright.Page page, URI baseUri,
-                                   Set<String> visited, List<PageInfo> results,
-                                   CrawlOptions options, Supplier<Boolean> cancelChecker,
-                                   List<String> pageConsoleErrors) {
-        String base = baseUri.getScheme() + "://" + baseUri.getHost()
-                + (baseUri.getPort() > 0 ? ":" + baseUri.getPort() : "");
-
-        for (String path : COMMON_PATHS) {
-            if (results.size() >= options.maxPages()) break;
-            if (Boolean.TRUE.equals(cancelChecker.get())) break;
-
-            String url = base + path;
-            if (visited.contains(url) || isExcluded(url, options.excludedPatterns())) continue;
-            visited.add(url);
-
-            try {
-                synchronized (pageConsoleErrors) { pageConsoleErrors.clear(); }
-                long navStart = System.currentTimeMillis();
-
-                Response response = page.navigate(url, new com.microsoft.playwright.Page.NavigateOptions()
-                        .setWaitUntil(WaitUntilState.LOAD).setTimeout(10000));
-                if (response == null || response.status() >= 400) continue;
-
-                String finalUrl = page.url();
-
-                if (!sameHost(finalUrl, baseUri)) {
-                    log.debug("Common path {} redirected off-domain to {} — skipping", url, finalUrl);
-                    continue;
+    boolean doLogin(com.microsoft.playwright.Page page, CrawlOptions opts) {
+        try {
+            Exception navigationFailure = null;
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                try {
+                    page.navigate(opts.authUrl(), new com.microsoft.playwright.Page.NavigateOptions()
+                            .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                            .setTimeout(20000));
+                    navigationFailure = null;
+                    break;
+                } catch (Exception e) {
+                    navigationFailure = e;
+                    if (attempt < 2) page.waitForTimeout(500);
                 }
-
-                if (isAuthRedirect(url, finalUrl)) {
-                    visited.add(finalUrl);
-                    continue;
-                }
-                visited.add(finalUrl);
-
-                try { page.waitForTimeout(1000); } catch (Exception ignored) {}
-                long loadTimeMs = System.currentTimeMillis() - navStart;
-
-                String title = page.title();
-                String html = page.content();
-
-                List<String> errors;
-                synchronized (pageConsoleErrors) { errors = new ArrayList<>(pageConsoleErrors); }
-                Map<String, String> headers;
-                try { headers = new java.util.HashMap<>(response.headers()); }
-                catch (Exception ignored) { headers = Map.of(); }
-
-                PageInfo pageInfo = new PageInfo(url, title, html);
-                pageInfo.setConsoleErrors(errors);
-                pageInfo.setResponseHeaders(headers);
-                pageInfo.setLoadTimeMs(loadTimeMs);
-                results.add(pageInfo);
-                log.debug("Common path discovered: {}", url);
-            } catch (Exception e) {
-                log.debug("Common path probe failed for {}: {}", url, e.getMessage());
             }
+            if (navigationFailure != null) throw navigationFailure;
+
+            Locator emailInput = page.locator(
+                    "input[type=email]:visible, input[name*=email i]:visible, "
+                            + "input[name*=username i]:visible, input[placeholder*=email i]:visible, "
+                            + "form input[type=text]:visible"
+            ).first();
+            emailInput.waitFor(new Locator.WaitForOptions()
+                    .setState(WaitForSelectorState.VISIBLE)
+                    .setTimeout(15000));
+            emailInput.fill(opts.authUsername());
+
+            Locator pwdInput = page.locator(
+                    "form input[type=password]:visible, input[type=password]:visible"
+            ).first();
+            pwdInput.waitFor(new Locator.WaitForOptions()
+                    .setState(WaitForSelectorState.VISIBLE)
+                    .setTimeout(10000));
+            pwdInput.fill(opts.authPassword());
+
+            Locator submitBtn = page.locator("form button[type=submit], form input[type=submit]").first();
+            if (!submitBtn.isVisible()) submitBtn = page.locator("form button:visible").last();
+            if (submitBtn.isVisible()) {
+                submitBtn.click();
+            } else {
+                pwdInput.press("Enter");
+            }
+            long loginDeadline = System.currentTimeMillis() + 90_000;
+            boolean authenticated = false;
+            String loginError = null;
+            while (System.currentTimeMillis() < loginDeadline) {
+                if (hasLoginToken(page)
+                        || isVisible(page, ".alert-success:visible")
+                        || !page.url().equals(opts.authUrl())) {
+                    authenticated = true;
+                    break;
+                }
+
+                loginError = visibleText(page, ".alert-error:visible");
+                if (loginError != null) break;
+                page.waitForTimeout(250);
+            }
+
+            if (!authenticated) {
+                if (loginError != null) {
+                    loginError = loginError
+                            .replace(opts.authUsername(), "[configured username]")
+                            .replace(opts.authPassword(), "[configured password]");
+                    log.warn("Application rejected login at {}: {}", opts.authUrl(),
+                            loginError.length() > 200 ? loginError.substring(0, 200) : loginError);
+                } else {
+                    log.warn("Login was not confirmed within 90 seconds at {}", opts.authUrl());
+                }
+                return false;
+            }
+
+            log.info("Login succeeded at {}", opts.authUrl());
+            return true;
+        } catch (Exception e) {
+            log.warn("Login failed at {}: {}", opts.authUrl(), e.getMessage());
+            return false;
         }
     }
 
-    // ── Login ─────────────────────────────────────────────────────────────────
+    private boolean hasLoginToken(com.microsoft.playwright.Page page) {
+        return Boolean.TRUE.equals(page.evaluate(
+                "() => Boolean(localStorage.getItem('token') || localStorage.getItem('access_token'))"));
+    }
 
-    private void doLogin(com.microsoft.playwright.Page page, CrawlOptions opts) {
-        try {
-            page.navigate(opts.authUrl(), new com.microsoft.playwright.Page.NavigateOptions()
-                    .setWaitUntil(WaitUntilState.LOAD)
-                    .setTimeout(15000));
+    private boolean isVisible(com.microsoft.playwright.Page page, String selector) {
+        return page.locator(selector).first().isVisible();
+    }
 
-            Locator emailInput = page.locator(
-                    "input[type=email], input[name*=email i], input[name*=username i], input[placeholder*=email i]"
-            ).first();
-            if (emailInput.isVisible()) emailInput.fill(opts.authUsername());
-
-            Locator pwdInput = page.locator("input[type=password]").first();
-            if (pwdInput.isVisible()) pwdInput.fill(opts.authPassword());
-
-            Locator submitBtn = page.locator("button[type=submit], input[type=submit]").first();
-            if (submitBtn.isVisible()) {
-                submitBtn.click();
-                page.waitForTimeout(3000);
-            }
-            log.info("Login completed at {}", opts.authUrl());
-        } catch (Exception e) {
-            log.warn("Login failed at {}: {}", opts.authUrl(), e.getMessage());
-        }
+    private String visibleText(com.microsoft.playwright.Page page, String selector) {
+        Locator alert = page.locator(selector).first();
+        if (!alert.isVisible()) return null;
+        String text = alert.innerText().trim();
+        return text.isEmpty() ? null : text;
     }
 
     // ── API endpoint detection ────────────────────────────────────────────────
@@ -336,7 +354,7 @@ public class CrawlerServiceImpl implements CrawlerService {
         try {
             URI u = URI.create(url);
             // Accept same host or any subdomain of the base domain
-            if (!sameOrRelatedHost(u.getHost(), baseUri.getHost())) return false;
+            if (!ApplicationUrlScope.isSameOrigin(baseUri.toString(), url)) return false;
             if (isStaticAsset(url)) return false;
 
             // Non-GET/HEAD/OPTIONS methods are almost always API calls
@@ -372,21 +390,6 @@ public class CrawlerServiceImpl implements CrawlerService {
         }
     }
 
-    private boolean sameOrRelatedHost(String host1, String host2) {
-        if (host1 == null || host2 == null) return false;
-        if (host1.equalsIgnoreCase(host2)) return true;
-        // Accept subdomains — api.example.com matches example.com
-        String root1 = rootDomain(host1);
-        String root2 = rootDomain(host2);
-        return !root1.isEmpty() && root1.equalsIgnoreCase(root2);
-    }
-
-    private String rootDomain(String host) {
-        String[] parts = host.split("\\.");
-        if (parts.length < 2) return host;
-        return parts[parts.length - 2] + "." + parts[parts.length - 1];
-    }
-
     private boolean isStaticAsset(String url) {
         String lower = url.toLowerCase();
         int q = lower.indexOf('?');
@@ -408,11 +411,7 @@ public class CrawlerServiceImpl implements CrawlerService {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private boolean sameHost(String url, URI baseUri) {
-        try {
-            return sameOrRelatedHost(URI.create(url).getHost(), baseUri.getHost());
-        } catch (Exception e) {
-            return false;
-        }
+        return ApplicationUrlScope.isSameOrigin(baseUri.toString(), url);
     }
 
     private boolean isAuthRedirect(String requestedUrl, String finalUrl) {

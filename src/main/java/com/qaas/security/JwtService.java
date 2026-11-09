@@ -20,7 +20,11 @@ public class JwtService {
 
     public JwtService(AppProperties properties) {
         this.properties = properties;
-        this.key = Keys.hmacShaKeyFor(properties.jwt().secret().getBytes(StandardCharsets.UTF_8));
+        String secret = properties.jwt() == null ? null : properties.jwt().secret();
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("qaas.jwt.secret must be configured with at least 32 UTF-8 bytes");
+        }
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
     public String createAccessToken(User user) {

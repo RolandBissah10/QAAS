@@ -20,4 +20,14 @@ public interface GeneratedTestRepository extends JpaRepository<GeneratedTest, UU
                         "(SELECT p.id FROM com.qaas.page.entity.Page p WHERE p.analysisId = :analysisId) " +
                         "OR t.analysisId = :analysisId")
     Page<GeneratedTest> findByAnalysisId(@Param("analysisId") UUID analysisId, Pageable pageable);
+
+    @Query(value = "SELECT DISTINCT t FROM GeneratedTest t " +
+                   "LEFT JOIN com.qaas.page.entity.Page p ON p.id = t.pageId " +
+                   "JOIN com.qaas.analysis.entity.Analysis a ON a.id = COALESCE(t.analysisId, p.analysisId) " +
+                   "WHERE a.projectId = :projectId",
+           countQuery = "SELECT COUNT(DISTINCT t) FROM GeneratedTest t " +
+                        "LEFT JOIN com.qaas.page.entity.Page p ON p.id = t.pageId " +
+                        "JOIN com.qaas.analysis.entity.Analysis a ON a.id = COALESCE(t.analysisId, p.analysisId) " +
+                        "WHERE a.projectId = :projectId")
+    Page<GeneratedTest> findByProjectId(@Param("projectId") UUID projectId, Pageable pageable);
 }

@@ -19,7 +19,7 @@ public class AsyncConfig implements AsyncConfigurer {
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(20);
-        executor.setThreadNamePrefix("analysis-pipeline-");
+        executor.setThreadNamePrefix("qaas-background-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();

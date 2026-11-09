@@ -1,5 +1,6 @@
 package com.qaas.project.settings;
 
+import com.qaas.security.crypto.EncryptedStringConverter;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -24,7 +25,12 @@ public class ProjectSettings {
     @Column(length = 255)
     private String authUsername;
 
-    @Column(length = 1024)
+    /**
+     * Crawl credential, encrypted at rest by {@link EncryptedStringConverter}. The column is
+     * sized for the base64 ciphertext (IV + tag + padding), which is larger than the plaintext.
+     */
+    @Convert(converter = EncryptedStringConverter.class)
+    @Column(length = 2048)
     private String authPassword;
 
     /** Comma-separated URL substrings to skip during crawl (e.g. "/logout,/admin"). */

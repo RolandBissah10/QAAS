@@ -34,6 +34,11 @@ public class GlobalExceptionHandler {
         return error(HttpStatus.CONFLICT, ex.getMessage(), request, null);
     }
 
+    @ExceptionHandler(ServiceUnavailableException.class)
+    ResponseEntity<ApiError> serviceUnavailable(ServiceUnavailableException ex, HttpServletRequest request) {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request, null);
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ApiError> accessDenied(AccessDeniedException ex, HttpServletRequest request) {
         return error(HttpStatus.FORBIDDEN, "Access denied", request, null);

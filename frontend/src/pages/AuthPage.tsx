@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Moon, ShieldCheck, Sun } from "lucide-react";
+import { Eye, EyeOff, Moon, ShieldCheck, Sun } from "lucide-react";
 import { Button } from "../components/Button";
 import { Field, TextInput } from "../components/Field";
 import { errorMessage } from "../lib/errors";
@@ -13,6 +13,7 @@ export function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("owner@qaas.dev");
   const [password, setPassword] = useState("password123");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -73,15 +74,29 @@ export function AuthPage() {
           <Field label="Email">
             <TextInput type="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
           </Field>
-          <Field label="Password">
-            <TextInput
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              minLength={8}
-              required
-            />
-          </Field>
+          <div className="grid gap-1.5 text-sm font-medium text-slate-700">
+            <label htmlFor="auth-password">Password</label>
+            <div className="relative">
+              <TextInput
+                id="auth-password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                minLength={8}
+                required
+                className="pr-11"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 grid w-10 place-items-center text-slate-500 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
           {mode === "register" ? (
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
               New accounts are created as <strong>Viewer</strong> with limited platform access.

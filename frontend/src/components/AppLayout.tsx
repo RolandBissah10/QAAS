@@ -1,7 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Bug,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   FolderKanban,
   Globe2,
@@ -12,6 +14,8 @@ import {
   ScanLine,
   Sun,
   TestTube2,
+  ListChecks,
+  Server,
   Users,
   Video,
   Zap,
@@ -37,6 +41,8 @@ const nav: NavItem[] = [
   { to: "/recordings",  label: "Recordings", icon: Video,        roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/pages",       label: "Pages",      icon: Globe2,       roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/tests",       label: "Tests",      icon: TestTube2,    roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/test-suites", label: "Suites",     icon: ListChecks,   roles: ["OWNER", "TESTER", "VIEWER"] },
+  { to: "/environments", label: "Environments", icon: Server,    roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/executions",  label: "Executions", icon: PlayCircle,   roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/bugs",        label: "Bugs",       icon: Bug,          roles: ["OWNER", "TESTER", "VIEWER"] },
   { to: "/api-endpoints", label: "APIs",     icon: Network,      roles: ["OWNER", "TESTER", "VIEWER"] },
@@ -50,6 +56,9 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const ThemeIcon = theme === "dark" ? Sun : Moon;
   const location = useLocation();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("qaas.sidebar.collapsed") === "true",
+  );
 
   useEffect(() => {
     if (location.search) {
@@ -59,20 +68,44 @@ export function AppLayout() {
     }
   }, [location.pathname, location.search]);
 
+  useEffect(() => {
+    localStorage.setItem("qaas.sidebar.collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
   const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) : [];
 
   return (
     <div className="min-h-screen bg-panel">
 
       {/* ── Desktop sidebar ───────────────────────────────────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-line bg-white md:block">
-        <div className="flex h-16 items-center border-b border-line px-5">
-          <div>
-            <div className="text-lg font-semibold text-ink">QAAS AI</div>
-            <div className="text-xs uppercase tracking-wide text-slate-500">Autonomous QA Platform</div>
-          </div>
+      <aside
+        className={`fixed inset-y-0 left-0 z-20 hidden flex-col border-r border-line bg-white transition-[width] duration-200 md:flex ${
+          sidebarCollapsed ? "w-16" : "w-64"
+        }`}
+      >
+        <div className={`flex h-16 shrink-0 items-center border-b border-line ${
+          sidebarCollapsed ? "justify-center px-2" : "justify-between px-5"
+        }`}>
+          {!sidebarCollapsed && (
+            <div>
+              <div className="text-lg font-semibold text-ink">QAAS AI</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Autonomous QA Platform</div>
+            </div>
+          )}
+          <button
+            type="button"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+          >
+            {sidebarCollapsed
+              ? <ChevronRight className="h-4 w-4" />
+              : <ChevronLeft className="h-4 w-4" />}
+          </button>
         </div>
-        <nav className="grid gap-1 p-3">
+        <nav className="min-h-0 flex-1 grid content-start gap-1 overflow-y-auto overscroll-contain p-3">
           {visibleNav.map((item) => {
             const Icon = item.icon;
             const savedSearch = sessionStorage.getItem(`qaas.search${item.to}`) ?? "";
@@ -81,14 +114,18 @@ export function AppLayout() {
                 key={item.to}
                 to={`${item.to}${savedSearch}`}
                 end={item.to === "/"}
+                title={sidebarCollapsed ? item.label : undefined}
+                aria-label={sidebarCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex h-10 items-center gap-3 rounded-md px-3 text-sm font-medium ${
+                  `flex h-10 items-center rounded-md text-sm font-medium ${
+                    sidebarCollapsed ? "justify-center px-0" : "gap-3 px-3"
+                  } ${
                     isActive ? "bg-teal-50 text-brand" : "text-slate-600 hover:bg-slate-100 hover:text-ink"
                   }`
                 }
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {item.label}
+                {!sidebarCollapsed && item.label}
               </NavLink>
             );
           })}
@@ -96,7 +133,9 @@ export function AppLayout() {
       </aside>
 
       {/* ── Content ───────────────────────────────────────────────────────────── */}
-      <div className="md:pl-64">
+      <div className={`transition-[padding] duration-200 ${
+        sidebarCollapsed ? "md:pl-16" : "md:pl-64"
+      }`}>
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-white px-4 md:px-6">
           <div className="min-w-0 md:hidden">
             <div className="font-semibold text-ink">QAAS AI</div>
@@ -125,7 +164,7 @@ export function AppLayout() {
 
       {/* ── Mobile bottom tab bar ─────────────────────────────────────────────── */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white shadow-soft md:hidden">
-        <div className="flex overflow-x-auto scrollbar-none">
+        <div className="flex overflow-x-auto overscroll-x-contain">
           {visibleNav.map((item) => {
             const Icon = item.icon;
             const savedSearch = sessionStorage.getItem(`qaas.search${item.to}`) ?? "";
@@ -135,7 +174,7 @@ export function AppLayout() {
                 to={`${item.to}${savedSearch}`}
                 end={item.to === "/"}
                 className={({ isActive }) =>
-                  `flex h-16 min-w-[64px] flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-medium transition-colors ${
+                  `flex h-16 min-w-[64px] shrink-0 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-medium transition-colors ${
                     isActive ? "text-brand" : "text-slate-500 hover:text-ink"
                   }`
                 }

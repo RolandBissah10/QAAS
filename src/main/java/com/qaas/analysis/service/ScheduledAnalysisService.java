@@ -9,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.support.CronExpression;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -85,7 +86,14 @@ public class ScheduledAnalysisService {
             projects.save(project);
 
             cancellationRegistry.register(analysis.getId());
-            pipelineService.run(analysis.getId(), project.getBaseUrl(), false);
+            try {
+                pipelineService.run(analysis.getId(), project.getBaseUrl(), false);
+            } catch (TaskRejectedException e) {
+                cancellationRegistry.deregister(analysis.getId());
+                analyses.failIfRunning(analysis.getId(), OffsetDateTime.now());
+                log.warn("Analysis queue is full; scheduled analysis {} marked FAILED", analysis.getId());
+                return;
+            }
 
             log.info("Scheduled analysis {} started for project {}", analysis.getId(), project.getId());
         } catch (Exception e) {

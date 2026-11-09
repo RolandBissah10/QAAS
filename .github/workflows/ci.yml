@@ -23,7 +23,13 @@ jobs:
           java-version: 21
           cache: maven
 
+      - name: Set up Chrome for browser tests
+        id: setup-chrome
+        uses: browser-actions/setup-chrome@v1
+
       - name: Build and test
+        env:
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: mvn -B verify
 
       - name: Build Docker image

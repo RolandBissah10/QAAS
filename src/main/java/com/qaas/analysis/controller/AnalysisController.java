@@ -8,6 +8,7 @@ import com.qaas.analysis.service.AnalysisPipelineService;
 import com.qaas.common.PagedResponse;
 import com.qaas.exception.ConflictException;
 import com.qaas.exception.NotFoundException;
+import com.qaas.exception.ServiceUnavailableException;
 import com.qaas.project.ProjectService;
 import com.qaas.project.entity.Project;
 import com.qaas.project.repository.ProjectRepository;
@@ -17,6 +18,7 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -90,7 +92,14 @@ public class AnalysisController {
         analysisRepository.save(analysis);
 
         cancellationRegistry.register(analysis.getId());
-        pipelineService.run(analysis.getId(), req.url(), deep);
+        try {
+            pipelineService.run(analysis.getId(), req.url(), deep);
+        } catch (TaskRejectedException e) {
+            cancellationRegistry.deregister(analysis.getId());
+            analysisRepository.failIfRunning(analysis.getId(), OffsetDateTime.now());
+            throw new ServiceUnavailableException(
+                    "Analysis capacity is currently full; retry the request shortly", e);
+        }
 
         return AnalysisResponse.from(analysis);
     }
@@ -113,7 +122,14 @@ public class AnalysisController {
     }
 
     @GetMapping(value = "/{id}/progress", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter progress(@PathVariable UUID id) {
+    public SseEmitter progress(@PathVariable UUID id, Authentication auth) {
+        // EventSource cannot set headers; the token arrives as ?token= and is resolved by
+        // JwtAuthenticationFilter, so the subscriber is authorized like any other reader.
+        Analysis analysis = analysisRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Analysis not found"));
+        if (!hasAccess(analysis, auth)) {
+            throw new NotFoundException("Analysis not found");
+        }
         return emitterRegistry.subscribe(id);
     }
 

@@ -201,8 +201,10 @@ public class AnalysisPipelineService {
                     ctxOpts = ctxOpts.setStorageState(crawlResult.storageStateJson());
                 }
                 BrowserContext sharedContext = browser.newContext(ctxOpts);
+                executionService.restrictNavigationToOrigin(sharedContext, baseUrl);
                 try {
                     int total = crawled.size();
+                    List<Page> persistedPages = new ArrayList<>();
                     for (int i = 0; i < total; i++) {
                         // Check before each page — exit cleanly without processing further pages
                         if (cancellationRegistry.isCancelled(analysisId)) {
@@ -219,6 +221,7 @@ public class AnalysisPipelineService {
                         page.setTitle(info.getTitle());
                         page.setPageType(classifyPage(info.getUrl()));
                         pageRepository.save(page);
+                        persistedPages.add(page);
 
                         // Step 3: Discover UI elements
                         int discoverProgress = 20 + (int) ((i + 1) * 15.0 / total);
@@ -254,6 +257,29 @@ public class AnalysisPipelineService {
                                 bugDetectionService.detectFromExecution(execution, analysisId);
                             } catch (Exception e) {
                                 log.warn("Execution failed for test '{}': {}", test.getName(), e.getMessage());
+                            }
+                        }
+                    }
+
+                    if (!cancellationRegistry.isCancelled(analysisId) && persistedPages.size() > 1) {
+                        progress.emit(analysisId, new ProgressEvent(
+                                "GENERATING", "Generating end-to-end journeys across discovered pages", 88));
+                        List<GeneratedTest> journeys;
+                        try {
+                            journeys = testGenerationService.generateJourneys(
+                                    persistedPages, baseUrl, crawlResult.storageStateJson() != null);
+                        } catch (Exception e) {
+                            log.warn("Journey generation failed for analysis {}: {}", analysisId, e.getMessage());
+                            journeys = List.of();
+                        }
+
+                        for (GeneratedTest journey : journeys) {
+                            if (cancellationRegistry.isCancelled(analysisId)) break;
+                            try {
+                                TestExecution execution = executionService.execute(journey, analysisId, sharedContext);
+                                bugDetectionService.detectFromExecution(execution, analysisId);
+                            } catch (Exception e) {
+                                log.warn("Journey execution failed for '{}': {}", journey.getName(), e.getMessage());
                             }
                         }
                     }

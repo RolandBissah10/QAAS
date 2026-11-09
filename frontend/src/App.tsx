@@ -16,6 +16,8 @@ import { UsersPage } from "./pages/UsersPage";
 import { AnalysisDetailPage } from "./pages/AnalysisDetailPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RecordingsPage } from "./pages/RecordingsPage";
+import { TestSuitesPage } from "./pages/TestSuitesPage";
+import { EnvironmentsPage } from "./pages/EnvironmentsPage";
 
 function ProtectedRoute() {
   const { accessToken } = useAuth();
@@ -35,6 +37,8 @@ export function App() {
         <Route path="/analysis/:id" element={<AnalysisDetailPage />} />
         <Route path="/pages" element={<PagesPage />} />
         <Route path="/tests" element={<TestsPage />} />
+        <Route path="/test-suites" element={<TestSuitesPage />} />
+        <Route path="/environments" element={<EnvironmentsPage />} />
         <Route path="/executions" element={<ExecutionsPage />} />
         <Route path="/bugs" element={<BugsPage />} />
         <Route path="/reports" element={<ReportsPage />} />

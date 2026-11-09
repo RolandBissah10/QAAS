@@ -20,6 +20,11 @@ import type {
   Role,
   Screenshot,
   TestExecution,
+  TestSuite,
+  TestSuiteRun,
+  TestSuiteRunSummary,
+  TestEnvironment,
+  SuiteTest,
   TrendPoint,
   UIElement,
   User,
@@ -147,6 +152,29 @@ export const projectMemberApi = {
     api.delete<void>(`/api/projects/${projectId}/members/${userId}`),
 };
 
+export const environmentApi = {
+  list: (projectId: string) =>
+    api.get<TestEnvironment[]>(`/api/projects/${projectId}/environments`).then((r) => r.data),
+  create: (projectId: string, payload: {
+    name: string;
+    baseUrl: string;
+    authUsername?: string;
+    authPassword?: string;
+  }) => api.post<TestEnvironment>(`/api/projects/${projectId}/environments`, payload).then((r) => r.data),
+  update: (projectId: string, environmentId: string, payload: {
+    name: string;
+    baseUrl: string;
+    authUsername?: string;
+    authPassword?: string;
+    clearCredentials?: boolean;
+  }) => api.put<TestEnvironment>(
+    `/api/projects/${projectId}/environments/${environmentId}`,
+    payload,
+  ).then((r) => r.data),
+  remove: (projectId: string, environmentId: string) =>
+    api.delete<void>(`/api/projects/${projectId}/environments/${environmentId}`),
+};
+
 export const analysisApi = {
   start: (projectId: string, url: string, deepTest = false) =>
     api
@@ -178,6 +206,36 @@ export const testApi = {
     api
       .get<PagedResponse<GeneratedTest>>(`/api/tests/analysis/${analysisId}`, { params: { page, size } })
       .then((r) => r.data),
+};
+
+export const testSuiteApi = {
+  tests: (projectId: string, page = 0, size = 200) =>
+    api.get<PagedResponse<SuiteTest>>(`/api/projects/${projectId}/tests`, { params: { page, size } })
+      .then((r) => r.data),
+  list: (projectId: string) =>
+    api.get<TestSuite[]>(`/api/projects/${projectId}/test-suites`).then((r) => r.data),
+  create: (projectId: string, payload: { name: string; description?: string }) =>
+    api.post<TestSuite>(`/api/projects/${projectId}/test-suites`, payload).then((r) => r.data),
+  remove: (projectId: string, suiteId: string) =>
+    api.delete(`/api/projects/${projectId}/test-suites/${suiteId}`),
+  replaceTests: (projectId: string, suiteId: string, testIds: string[]) =>
+    api.put<TestSuite>(`/api/projects/${projectId}/test-suites/${suiteId}/tests`, { testIds })
+      .then((r) => r.data),
+  listRuns: (projectId: string, suiteId: string) =>
+    api.get<PagedResponse<TestSuiteRunSummary>>(
+      `/api/projects/${projectId}/test-suites/${suiteId}/runs`,
+      { params: { page: 0, size: 20 } },
+    ).then((r) => r.data),
+  startRun: (projectId: string, suiteId: string, environmentId?: string) =>
+    api.post<TestSuiteRun>(
+      `/api/projects/${projectId}/test-suites/${suiteId}/runs`,
+      null,
+      { params: environmentId ? { environmentId } : {} },
+    ).then((r) => r.data),
+  getRun: (projectId: string, suiteId: string, runId: string) =>
+    api.get<TestSuiteRun>(
+      `/api/projects/${projectId}/test-suites/${suiteId}/runs/${runId}`,
+    ).then((r) => r.data),
 };
 
 export const executionApi = {

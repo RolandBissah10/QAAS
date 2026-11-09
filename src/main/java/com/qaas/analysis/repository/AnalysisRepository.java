@@ -31,6 +31,11 @@ public interface AnalysisRepository extends JpaRepository<Analysis, UUID> {
 
     @Modifying
     @Transactional
+    @Query("UPDATE Analysis a SET a.status = 'FAILED', a.completedAt = :now WHERE a.id = :id AND a.status = 'RUNNING'")
+    int failIfRunning(@Param("id") UUID id, @Param("now") OffsetDateTime now);
+
+    @Modifying
+    @Transactional
     @Query("UPDATE Analysis a SET a.status = 'FAILED', a.completedAt = :now WHERE a.status = 'RUNNING'")
     int failAllRunning(@Param("now") OffsetDateTime now);
 }

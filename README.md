@@ -7,12 +7,13 @@ An automated web quality-assurance platform. Point it at any URL and it crawls t
 ## Features
 
 ### Analysis Pipeline
-- **Web crawler** — BFS Playwright crawler that discovers pages via link extraction, sitemap probing, and common path heuristics; supports form-based login for authenticated areas
-- **AI test generation** — sends page HTML to Claude (Haiku) and receives executable Playwright and REST-Assured test scripts
-- **Test execution** — runs generated scripts inside a shared headless Chromium context and records pass/fail/error per test
+- **Web crawler** — BFS Playwright crawler that discovers pages from links and the target site's sitemap, stays on the exact application origin, and supports form-based login for authenticated areas; it does not guess common routes and fails the analysis when configured login cannot be completed
+- **Bounded analysis execution** — limits concurrent pipeline workers and queued analyses; overloaded manual starts return HTTP 503 rather than leaving an analysis stuck in `RUNNING`, while interrupted analyses are marked failed on restart
+- **AI test generation** — sends relevant page content and up to 80 discovered controls to the configured AI provider, creating multiple page-level scenarios plus up to three cross-page user journeys from the discovered page inventory
+- **Test execution** — runs generated scripts inside the shared authenticated headless Chromium context; journeys are limited to pages discovered in that analysis and record pass/fail/error per test
 - **Bug detection** — auto-creates bug records from failed executions, assigns severity (CRITICAL / HIGH), and tracks lifecycle (OPEN → RESOLVED)
 - **Deep checks** — optional second-pass inspection covering security headers, accessibility, performance metrics, console errors, and broken links
-- **API endpoint discovery** — network interception during crawling to catalog observed REST endpoints with method, URL, and status code
+- **API endpoint discovery** — network interception during crawling to catalog observed REST endpoints with method, URL, and status code; API tests do not follow redirects
 - **UI element discovery** — HTML parsing to catalog interactive elements (buttons, inputs, forms) per page
 - **Report generation** — compiles results into downloadable JSON or PDF reports
 - **HAR recordings** — captures full HTTP traffic during analysis; also supports manual HAR upload for replay inspection with stop/cancel control
@@ -95,7 +96,7 @@ An automated web quality-assurance platform. Point it at any URL and it crawls t
 | Package | Description |
 |---|---|
 | `analysis` | Pipeline orchestration — runs crawl → generate → execute → deep test → report as an async job with SSE progress and cancellation |
-| `crawler` | BFS Playwright web crawler with sitemap support, link extraction, and network interception |
+| `crawler` | BFS Playwright web crawler restricted to the target origin, with sitemap support, discovered-link extraction, and network interception |
 | `playwright` | Playwright wrappers: generic browser automation, crawler service, and scripted test runner |
 | `generator` | AI test generation via Claude — produces Playwright and REST-Assured scripts from page HTML |
 | `apitest` | REST-Assured test generation and execution for discovered API endpoints |
@@ -161,20 +162,29 @@ cd QAAS
 docker compose up -d postgres
 ```
 
-Or point the app at an existing PostgreSQL instance. The schema is managed automatically via Hibernate (`ddl-auto: update`).
+Set `POSTGRES_PASSWORD` in the environment first; Compose intentionally has no default
+database password.
+
+Or point the app at an existing PostgreSQL instance. Fresh schemas are created by Flyway;
+existing non-empty schemas without Flyway history are baselined at version 1 and validated
+by Hibernate without automatic schema changes.
 
 ### 3. Configure the backend
 
-Create `src/main/resources/application-local.yml` or set environment variables:
+Set environment variables or configure an active Spring profile:
 
 ```yaml
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/qaas
     username: qaas
-    password: qaas
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
 qaas:
+  jwt:
+    secret: <at least 32 random bytes>
+  crypto:
+    secret: <at least 32 random bytes; keep stable to decrypt stored crawl credentials>
   claude:
     api-key: sk-ant-...       # required for AI test generation
   mail:
@@ -207,11 +217,45 @@ Frontend starts on **http://localhost:5173** and proxies API calls to port 8090.
 docker compose up --build
 ```
 
+Before starting Compose, provide `POSTGRES_PASSWORD`, `QAAS_JWT_SECRET`, and
+`QAAS_CRYPTO_SECRET` in the environment. The JWT and crypto secrets must each contain at
+least 32 UTF-8 bytes; generate them with a cryptographically secure secret generator and
+keep the crypto secret stable, or previously encrypted project credentials cannot be read.
+SMTP notifications are disabled by default; set `QAAS_MAIL_ENABLED=true` and supply
+`QAAS_MAIL_USERNAME` and `QAAS_MAIL_PASSWORD` only when needed. Do not commit credentials
+or secrets to the Compose file or repository.
+
 This starts:
 - **PostgreSQL 16** on port 5432
 - **Backend** on port 8090
 
-Set `QAAS_CLAUDE_API_KEY` in your environment or the compose file before starting.
+Set `QAAS_CLAUDE_API_KEY` in your environment before starting if AI test generation is
+needed. If the SMTP credential previously present in this repository was active, revoke
+and replace it; removing it from the working file does not invalidate the credential or
+remove it from prior Git history.
+
+### Database migrations and backups
+
+Flyway creates a fresh database from `src/main/resources/db/migration`. Hibernate runs
+with `ddl-auto: validate` and fails startup if the database schema does not match the
+entities; it will not silently change a production schema.
+
+For a database that already contains QAAS tables but has no Flyway history, Flyway
+baselines the non-empty schema at version 1 and does not replay the initial schema
+creation. Back up the database before the first deployment with Flyway enabled. After
+baseline, deliver future schema changes as new, ordered Flyway migrations.
+
+Use PostgreSQL client tools from a trusted host to create and restore a custom-format
+backup. Test restores before relying on backups:
+
+```powershell
+pg_dump --format=custom --file=qaas-backup.dump --host=localhost --port=5432 --username=qaas qaas
+pg_restore --verbose --no-owner --dbname=qaas_restore --host=localhost --port=5432 --username=qaas qaas-backup.dump
+```
+
+`qaas_restore` should be a separate, empty database for restore testing; do not restore
+over the live database unless that operation is explicitly planned and backed up. Store
+backup files securely because they contain application data.
 
 ---
 
@@ -222,8 +266,14 @@ Set `QAAS_CLAUDE_API_KEY` in your environment or the compose file before startin
 | `PORT` | `8090` | Backend server port |
 | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/qaas` | PostgreSQL JDBC URL |
 | `SPRING_DATASOURCE_USERNAME` | `qaas` | Database username |
-| `SPRING_DATASOURCE_PASSWORD` | `qaas` | Database password |
-| `QAAS_CLAUDE_API_KEY` | — | Anthropic Claude API key (required) |
+| `SPRING_DATASOURCE_PASSWORD` | — | Required database password |
+| `QAAS_JWT_SECRET` | — | Required signing secret, at least 32 UTF-8 bytes |
+| `QAAS_CRYPTO_SECRET` | — | Required stable secret for encrypting project crawl credentials |
+| `QAAS_CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Exact allowed browser origins; wildcards are rejected |
+| `QAAS_AI_PROVIDER` | `auto` | AI provider: `claude`, `gemini`, or `auto` (prefers Claude when both keys are configured) |
+| `QAAS_CLAUDE_API_KEY` | — | Optional Anthropic Claude API key |
+| `QAAS_GEMINI_API_KEY` | — | Google Gemini API key |
+| `QAAS_GEMINI_MODEL` | `gemini-3.5-flash-lite` | Gemini model ID, without the `models/` prefix |
 | `QAAS_MAIL_ENABLED` | `false` | Enable SMTP email notifications |
 | `QAAS_MAIL_HOST` | — | SMTP host |
 | `QAAS_MAIL_PORT` | — | SMTP port |
@@ -240,9 +290,11 @@ All endpoints are secured with JWT. Include `Authorization: Bearer <token>` on e
 |---|---|
 | Auth | `POST /api/auth/register`, `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout` |
 | Projects | `/api/projects`, `/api/projects/{id}/members`, `/api/projects/{id}/settings` |
+| Environments | `/api/projects/{id}/environments` (list/create), `/api/projects/{id}/environments/{environmentId}` (update/delete) |
 | Analysis | `/api/analysis/start`, `/api/analysis/{id}`, `/api/analysis/{id}/stop`, `/api/analysis/{id}/progress` (SSE) |
 | Pages | `/api/pages/analysis/{id}` |
 | Tests | `/api/tests/analysis/{id}` |
+| Test Suites | `/api/projects/{id}/tests`, `/api/projects/{id}/test-suites` (create/list), `/api/projects/{id}/test-suites/{suiteId}` (delete), `/api/projects/{id}/test-suites/{suiteId}/tests` (replace membership), `/api/projects/{id}/test-suites/{suiteId}/runs` (queue/list history), `/api/projects/{id}/test-suites/{suiteId}/runs/{runId}` (status/results) |
 | Executions | `/api/executions/analysis/{id}` |
 | Bugs | `/api/bugs/analysis/{id}` |
 | API Endpoints | `/api/api-endpoints/analysis/{id}` |
@@ -254,6 +306,17 @@ All endpoints are secured with JWT. Include `Authorization: Bearer <token>` on e
 | Users | `/api/users`, `/api/users/me` |
 
 Full interactive docs available at `/swagger-ui.html`.
+
+Suite runs execute in the background and return HTTP 202 with a run ID. Poll the run
+endpoint for `QUEUED`, `RUNNING`, `PASSED`, or `FAILED` status and per-test results.
+Suite membership is project-scoped; tests from another project are rejected.
+Only project owners can delete suites. Deletion also removes that suite's run history
+but does not delete the generated tests; a suite with an active run cannot be deleted.
+The web app provides suite management at **Test Suites** in the navigation. Project owners
+can configure public HTTP(S) origins at **Environments** and select one for a suite run.
+Environment credentials use the configured crypto secret, are encrypted at rest, and are
+never returned by the API or included in run results. The origin may not contain a path,
+query, or fragment; each generated test's path and query are retained when targeting it.
 
 ---
 

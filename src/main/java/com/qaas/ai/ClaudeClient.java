@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -25,14 +26,16 @@ public class ClaudeClient {
     private static final String CLAUDE_MODEL = "claude-haiku-4-5-20251001";
 
     // Gemini
-    private static final String GEMINI_URL   = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-    private static final String GEMINI_MODEL = "gemini-2.0-flash";
+    private static final String GEMINI_URL   = "https://generativelanguage.googleapis.com/v1beta/models/";
 
     @Value("${qaas.claude.api-key:}")
     private String claudeKey;
 
     @Value("${qaas.gemini.api-key:}")
     private String geminiKey;
+
+    @Value("${qaas.gemini.model:gemini-3.5-flash-lite}")
+    private String geminiModel;
 
     // "claude" | "gemini" | "auto" (auto picks claude if key present, otherwise gemini)
     @Value("${qaas.ai.provider:auto}")
@@ -82,7 +85,7 @@ public class ClaudeClient {
 
         String body = objectMapper.writeValueAsString(Map.of(
                 "model", CLAUDE_MODEL,
-                "max_tokens", 1024,
+                "max_tokens", 4096,
                 "messages", List.of(Map.of("role", "user", "content", prompt))
         ));
 
@@ -110,15 +113,17 @@ public class ClaudeClient {
     private String callGemini(String prompt) throws Exception {
         if (geminiKey == null || geminiKey.isBlank())
             throw new IllegalStateException("Gemini API key not configured");
+        if (geminiModel == null || geminiModel.isBlank())
+            throw new IllegalStateException("Gemini model not configured");
 
         String body = objectMapper.writeValueAsString(Map.of(
                 "contents", List.of(Map.of(
                         "parts", List.of(Map.of("text", prompt))
                 )),
-                "generationConfig", Map.of("maxOutputTokens", 1024)
+                "generationConfig", Map.of("maxOutputTokens", 4096)
         ));
 
-        String url = GEMINI_URL + "?key=" + geminiKey;
+        String url = geminiUrl(geminiModel, geminiKey);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -127,7 +132,7 @@ public class ClaudeClient {
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
-        HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = sendGeminiWithRetry(http, request, Duration.ofSeconds(1));
         if (response.statusCode() != 200) {
             log.warn("Gemini API error {}: {}", response.statusCode(), response.body());
             throw new RuntimeException("Gemini API returned HTTP " + response.statusCode());
@@ -137,5 +142,26 @@ public class ClaudeClient {
         return root.path("candidates").get(0)
                    .path("content").path("parts").get(0)
                    .path("text").asText();
+    }
+
+    static String geminiUrl(String model, String apiKey) {
+        return GEMINI_URL + model + ":generateContent?key=" + apiKey;
+    }
+
+    static HttpResponse<String> sendGeminiWithRetry(
+            HttpClient client, HttpRequest request, Duration retryDelay) throws IOException, InterruptedException {
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 429 && response.statusCode() != 503) {
+            return response;
+        }
+
+        log.warn("Gemini API returned HTTP {}; retrying once after {}", response.statusCode(), retryDelay);
+        try {
+            Thread.sleep(retryDelay.toMillis());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 }

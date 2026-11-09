@@ -80,6 +80,11 @@ public class TestGenerationServiceImpl implements TestGenerationService {
         return out;
     }
 
+    @Override
+    public List<GeneratedTest> generateJourneys(List<Page> pages, String baseUrl, boolean authenticated) {
+        return aiTestGenerationService.generateJourneys(pages, baseUrl, authenticated);
+    }
+
     private GeneratedTest save(UUID pageId, String pageUrl, String name, String type) {
         GeneratedTest t = new GeneratedTest();
         t.setPageId(pageId);

@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: qaas
       POSTGRES_USER: qaas
-      POSTGRES_PASSWORD: qaas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting Compose}
     ports:
       - "5432:5432"
     volumes:
@@ -25,16 +25,21 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/qaas
       SPRING_DATASOURCE_USERNAME: qaas
-      SPRING_DATASOURCE_PASSWORD: qaas
-      QAAS_JWT_SECRET: change-this-secret-to-at-least-32-characters
-      QAAS_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD before starting Compose}
+      QAAS_JWT_SECRET: ${QAAS_JWT_SECRET:?Set QAAS_JWT_SECRET before starting Compose}
+      QAAS_CRYPTO_SECRET: ${QAAS_CRYPTO_SECRET:?Set QAAS_CRYPTO_SECRET before starting Compose}
+      QAAS_CORS_ALLOWED_ORIGINS: ${QAAS_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       PORT: 8090
-      QAAS_MAIL_ENABLED: "true"
-      QAAS_MAIL_HOST: smtp.gmail.com
-      QAAS_MAIL_PORT: "587"
-      QAAS_MAIL_USERNAME: rolandbissah10@gmail.com
-      QAAS_MAIL_PASSWORD: agmgtppcfkiwwfbs
-      QAAS_MAIL_FROM: rolandbissah10@gmail.com
+      QAAS_AI_PROVIDER: ${QAAS_AI_PROVIDER:-auto}
+      QAAS_CLAUDE_API_KEY: ${QAAS_CLAUDE_API_KEY:-}
+      QAAS_GEMINI_API_KEY: ${QAAS_GEMINI_API_KEY:-}
+      QAAS_GEMINI_MODEL: ${QAAS_GEMINI_MODEL:-gemini-3.5-flash-lite}
+      QAAS_MAIL_ENABLED: ${QAAS_MAIL_ENABLED:-false}
+      QAAS_MAIL_HOST: ${QAAS_MAIL_HOST:-smtp.gmail.com}
+      QAAS_MAIL_PORT: ${QAAS_MAIL_PORT:-587}
+      QAAS_MAIL_USERNAME: ${QAAS_MAIL_USERNAME:-}
+      QAAS_MAIL_PASSWORD: ${QAAS_MAIL_PASSWORD:-}
+      QAAS_MAIL_FROM: ${QAAS_MAIL_FROM:-noreply@qaas.local}
       SCREENSHOT_DIR: /app/screenshots
       REPORT_DIR: /app/reports
     ports:
